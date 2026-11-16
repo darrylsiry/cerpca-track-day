@@ -1,0 +1,22 @@
+# What the Vercel CLI leaves behind when it uploads this folder.
+# (With this file present the CLI no longer reads .gitignore, so everything is listed here.)
+
+# Source documents: the app does not read them, and they should not leave this machine.
+/CERPCA content/
+/*.docx
+
+# Local database, uploads and backups
+/.data/
+
+# Secrets and local settings
+.env*
+!.env.example
+
+# Tooling and build output
+/.claude/
+/.next/
+/.vercel/
+/node_modules/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
