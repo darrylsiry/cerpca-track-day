@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>UX-007 Alerts first on phones</title>
+<style>
+body{margin:0;background:#eceef0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#14171a}
+.wrap{display:flex;gap:32px;padding:24px;flex-wrap:wrap}
+.phone{width:340px;height:600px;overflow:hidden;border:1px solid #b3bac1;border-radius:22px;background:#eceef0;padding:14px;box-sizing:border-box;position:relative}
+h1{font:800 18px "Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
+.t{font:800 34px "Arial Narrow",sans-serif;text-transform:uppercase;margin:0}
+.card{background:#fff;border:1px solid #d5d9dd;border-radius:14px;padding:12px 14px;margin-top:10px}
+.al{background:#fff;border:1px solid #d5d9dd;border-radius:14px;overflow:hidden;margin-top:10px}
+.it{padding:12px 14px;border-top:1px solid #e3e6e9;position:relative}.it:first-child{border-top:0}
+.urg{border-left:6px solid #ffc61a}
+.dot{width:9px;height:9px;border-radius:50%;background:#d1242a;position:absolute;right:14px;top:16px}
+.s{font-size:13px;color:#444b52}.btn{display:inline-block;border:1px solid #b3bac1;border-radius:10px;padding:6px 12px;font-weight:600;background:#fff}
+.nav{position:absolute;left:0;right:0;bottom:0;height:56px;background:#fff;border-top:1px solid #d5d9dd;font-size:11px;font-weight:700;display:flex;justify-content:space-around;align-items:center;color:#666d75}
+.hint{font-size:14px;margin-top:8px;text-decoration:underline;font-weight:600}
+.chg{outline:2px dashed #d1242a;outline-offset:2px}
+</style></head><body><div class="wrap">
+<div><h1>Before</h1><div class="phone"><p class="t">Alerts</p><div class="s">2 unread alerts. Announcements from the organizers…</div>
+<div style="margin-top:8px"><span class="btn">Mark all read</span></div>
+<div class="card"><b>Notifications on this device</b><div class="s"><b>Not set up on this server</b><br>Push notifications have not been configured yet…</div></div>
+<div class="card"><div class="s"><b>HOW ALERTS REACH YOU</b><br>Everything is always listed here… On iPhone and iPad, push notifications only work after you add Track Day to your Home Screen…</div></div>
+<div class="nav"><span>Now</span><span>Schedule</span><span>Track</span><span>Alerts</span><span>More</span></div></div></div>
+<div><h1>After</h1><div class="phone"><p class="t">Alerts</p><div class="s">2 unread · <u>Mark all read</u></div>
+<div class="al chg"><div class="it urg"><b>Oil-dry at Turn 5 exit</b><span class="dot"></span><div class="s">Absorbent down on driver's left at the Turn 5 track-out. Expect a debris flag at Station 5.</div><div class="s"><b style="color:#8a5a00">Urgent</b> · 32 min ago</div></div>
+<div class="it"><b>Green drivers: track walk at lunch</b><span class="dot"></span><div class="s">Meet your instructors at the false grid at 12:15.</div><div class="s">1 day ago</div></div>
+<div class="it"><b>Welcome to the Fall Driver Education</b><div class="s">Gates open at 6:30 AM…</div></div></div>
+<div class="hint chg">How alerts reach you ›</div>
+<div class="nav"><span>Now</span><span>Schedule</span><span>Track</span><span>Alerts</span><span>More</span></div></div></div>
+</div></body></html>

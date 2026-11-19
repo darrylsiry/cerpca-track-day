@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>UX-005 Grid tech: still to sticker</title>
+<style>
+body{margin:0;background:#eceef0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#14171a}
+.wrap{display:flex;gap:32px;padding:24px;flex-wrap:wrap}.col{width:380px}
+h1{font:800 18px "Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
+.search{background:#fff;border:1px solid #b3bac1;border-radius:10px;padding:12px 14px;color:#666d75;font-size:17px}
+.meta{font-size:13px;color:#444b52;margin:8px 0 4px}
+ul{list-style:none;margin:0;padding:0;background:#fff;border:1px solid #d5d9dd;border-radius:14px;overflow:hidden}
+li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid #e3e6e9}li:first-child{border-top:0}
+.num{border:2px solid #14171a;border-radius:6px;font:800 20px "Arial Narrow",sans-serif;padding:0 6px;min-width:34px;text-align:center}
+.p{border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;margin-left:auto;white-space:nowrap}
+.g{background:#e3f4ea;color:#0d7a40}.i{background:#e5eefc;color:#1a52b8}.w{background:#fff3cf;color:#8a5a00}.b{background:#fde8e8;color:#b81d22}
+.seg{display:inline-flex;background:#fff;border:1px solid #d5d9dd;border-radius:12px;padding:3px;margin:8px 0}
+.seg span{padding:6px 12px;border-radius:9px;font-weight:600;font-size:14px}.on{background:#14171a;color:#fff}
+.chg{outline:2px dashed #d1242a;outline-offset:2px}
+</style></head><body><div class="wrap">
+<div class="col"><h1>Before</h1><div class="search">Car number or name</div><div class="meta">42 cars, by number</div><ul>
+<li><span class="num">4</span>Fiona Castellan<span class="p g">✓ F26-026</span></li>
+<li><span class="num">7</span>Gus Lindqvist<span class="p g">✓ F26-008</span></li>
+<li><span class="num">11</span>Abigail Renner<span class="p g">✓ F26-030</span></li>
+<li><span class="num">55</span>Holly Pruitt<span class="p w">Paperwork</span></li>
+<li><span class="num">63</span>Lucille Brandt<span class="p g">✓ F26-005</span></li>
+<li><span class="num">66</span>Victor Osei<span class="p i">Ready</span></li>
+<li style="color:#666d75">… 36 more to scan</li></ul></div>
+<div class="col"><h1>After</h1><div class="search">Car number or name</div>
+<div class="seg chg"><span class="on">Still to sticker 10</span><span>All cars 42</span></div><ul>
+<li><span class="num">66</span>Victor Osei<span class="p i">Ready</span></li>
+<li><span class="num">173</span>Frank Dombrowski<span class="p i">Ready</span></li>
+<li><span class="num">204</span>Naomi Ashcroft<span class="p i">Ready</span></li>
+<li class="chg"><span class="num">108</span>Wendell Park<span class="p w">With tech team</span></li>
+<li class="chg"><span class="num">396</span>Greg Thibodeaux<span class="p b">Sent back</span></li>
+<li class="chg"><span class="num">235</span>Luis Carvalho<span class="p w">Waiting on shop</span></li>
+<li class="chg"><span class="num">55</span>Holly Pruitt<span class="p w">Not started</span></li>
+<li style="color:#666d75">… 3 more</li></ul></div>
+</div></body></html>

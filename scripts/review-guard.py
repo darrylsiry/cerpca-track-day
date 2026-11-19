@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""PreToolUse hook for the review agents. The runner (scripts/review-run.sh) copies this into each
+agent's private snapshot and names the agent as the argument. It enforces, in the harness rather than
+only in the agents' instructions:
+
+  independence  every tool stays inside the snapshot, so an agent cannot reach another agent's report,
+                the ledger, memory (~/.claude), transcripts or the real repository; no agent can start
+                another agent; nobody fetches /admin/app-tests.
+  read-only     no writes, installs, deploys or network requests, and no running code: the runner runs
+                each agent's checks itself and leaves the output in checks/. The UAT agent alone may
+                run its harness (scripts/uat.sh), which builds a throwaway sandbox inside its snapshot.
+
+Exit 0 allows, exit 2 refuses with the reason on stderr. It fails closed: any error here refuses.
+A deny-list with an inside-the-snapshot rule, not a sandbox: it stops mistakes and casual reach, not a
+determined program. The separation that matters most is structural: the snapshot simply does not
+contain anyone else's work, or any secrets.
+"""
+import json
+import os
+import re
+import sys
+
+ALL = {"code", "security", "ux", "uat"}
+SECRET_FILE = re.compile(r"(^|/)(\.env(\.[^/]*)?|\.vercel(/.*)?)$")
+SECRET_ALLOWED = re.compile(r"(^|/)\.env\.example$")
+OUTSIDE_ROOTS = r"Users|home|private|tmp|var|etc|root|Volumes|Library|System|Applications|opt"
+
+# What each agent may run that the read-only rules would otherwise refuse. For the three reading agents:
+# nothing. The runner runs the type-check, lint, npm audit and the screenshots itself and puts their
+# output in checks/ (scripts/review-run.sh). The UAT agent runs its harness, and nothing else.
+PERMITTED = {
+    "code": [],
+    "security": [],
+    "ux": [],
+    "uat": [r"(^|[;&|]\s*)(\./)?scripts/uat\.sh(\s+(all|sandbox|canary|prod))?(?=\s*($|[;&|]|2>))"],
+}
+
+
+def refuse(reason):
+    print(f"Refused by the review guard: {reason}", file=sys.stderr)
+    sys.exit(2)
+
+
+def own_tool_result(root, full):
+    """A long tool output the harness saved for this agent's own session, and nothing else under ~/.claude."""
+    slug = re.sub(r"[^A-Za-z0-9]", "-", root)
+    base = os.path.join(os.path.expanduser("~"), ".claude", "projects", slug) + os.sep
+    return full.startswith(base) and "/tool-results/" in full
+
+
+def check_path(root, agent, path, tool=""):
+    raw = os.path.expanduser(str(path))
+    full = os.path.normpath(os.path.join(root, raw))
+    if tool == "Read" and ".." not in raw.split(os.sep) and own_tool_result(root, full):
+        return
+    # ".." is refused outright: through a symlink it resolves somewhere else than it appears to.
+    if ".." in raw.split(os.sep) or not (full == root or full.startswith(root + os.sep)):
+        refuse(f"{path} is outside this review's private snapshot.")
+    real, real_root = os.path.realpath(full), os.path.realpath(root)
+    # node_modules is a copy, so nothing legitimate in a snapshot resolves outside it.
+    if not (real == real_root or real.startswith(real_root + os.sep)):
+        refuse(f"{path} resolves outside this review's private snapshot.")
+    if SECRET_FILE.search(full) and not SECRET_ALLOWED.search(full):
+        refuse(f"{path} may hold secrets.")
+    rel = os.path.relpath(full, root)
+    reports = os.path.join("docs", "agent-reports")
+    if rel.startswith(reports + os.sep) and not (rel + os.sep).startswith(os.path.join(reports, agent) + os.sep):
+        refuse(f"{path} is another agent's work, or the shared ledger.")
+
+
+def check_files(root, agent, tool, inp):
+    for key in ("file_path", "path"):
+        if inp.get(key):
+            check_path(root, agent, inp[key], tool)
+    if ".." in str(inp.get("pattern", "")) and tool == "Glob" or ".." in str(inp.get("glob", "")):
+        refuse("the pattern climbs out of the snapshot.")
+
+
+def check_bash(root, agent, cmd):
+    # Independence: nothing outside the snapshot.
+    scrubbed = cmd.replace(root, "")
+    if re.search(rf"(^|[\s='\"(:,])/({OUTSIDE_ROOTS})(/|\b)", scrubbed):
+        refuse("the command names a path outside this review's private snapshot.")
+    if re.search(r"\b(cd|find|ls|du|tree|rg|grep\s+-[a-zA-Z]*[rR][a-zA-Z]*\s+\S+)\s+/(\s|$|;|&|\|)", scrubbed):
+        refuse("the command searches from the root of the disk.")
+    if re.search(r"(^|[\s/'\"=])\.\.(/|\s|$|'|\"|;|&|\|)", scrubbed):
+        refuse("the command climbs out of the snapshot.")
+    if re.search(r"~|\$\{?HOME\b|\$\{?OLDPWD\b|\bpushd\b|\bpopd\b|\$\{!|\beval\b|\bexport\s+-p\b|(^|[;&|]\s*)(set|declare|compgen)(\s|$)|\|\s*(ba|z|da)?sh\b|\b(ba|z|da)?sh\s+-c\b", scrubbed):
+        refuse("the command reaches outside the snapshot or hides what it runs.")
+    if re.search(r"\.claude/(projects|scheduled-tasks|memory)|MEMORY\.md|AGENT_LEDGER", scrubbed):
+        refuse("memory and the shared ledger are off limits.")
+    for other in ALL - {agent}:
+        if re.search(rf"agent-reports/{other}\b", scrubbed):
+            refuse("another agent's report is off limits.")
+    # The harness's settings (ports, addresses, keep and reuse switches) are the runner's to set. One of them
+    # in front of scripts/uat.sh could point the writing tests somewhere other than the throwaway sandbox.
+    if re.search(r"\bUAT_[A-Z_]+\s*=|\bDATABASE_URL\s*=|\bPLAYWRIGHT_[A-Z_]+\s*=", scrubbed):
+        refuse("the harness's settings are set by the runner, not by the agent.")
+    if "app-tests" in scrubbed and re.search(r"\b(curl|wget|fetch|http)\b", scrubbed):
+        refuse("/admin/app-tests is where review reports would be shown.")
+    if re.search(r"(^|[;&|(]\s*|\bxargs\s+)claude\b|\bosascript\b|\bprintenv\b|(^|[;&|]\s*)env(\s*$|\s*[;&|])|/proc/", scrubbed):
+        refuse("no starting other agents, no scripting the desktop, no dumping the environment.")
+    # The OS profile must let the CLI read the Keychain (its login is there), so the tool that reads it is refused.
+    if re.search(r"(^|[;&|(]\s*|\bxargs\s+(-[^ ]+\s+)*|\bsudo\s+)(security|keychain|dscl|defaults)\b", scrubbed):
+        refuse("credentials and system settings are off limits.")
+    if re.search(r"(^|[\s/'\"])\.env(\.(?!example)\w+)?(\s|$|'|\")|(^|[\s/'\"])\.vercel\b", scrubbed):
+        refuse("secret files are off limits.")
+
+    # Remove what this agent is permitted, then apply the read-only rules to the rest.
+    rest = scrubbed
+    for pattern in PERMITTED[agent]:
+        rest = re.sub(pattern, " ", rest)
+    unquoted = re.sub(r"'[^']*'|\"[^\"]*\"", "''", rest)  # a > inside a quoted pattern is not a redirect
+    if re.search(r"(^|[^<>0-9&])>{1,2}\s*(?!&|/dev/null)[^\s&]|\btee\b|\bsed\b[^|;&]*\s-[a-zA-Z]*i\b|\bdd\b", unquoted):
+        refuse("the review agents write nothing.")
+    if re.search(r"(^|[;&|(]\s*|\bsudo\s+|\bxargs\s+(-[^ ]+\s+)*)(rm|rmdir|mv|cp|ln|mkdir|touch|truncate|chmod|chown|chgrp|install|mkfs|kill|killall|pkill|shutdown|reboot|launchctl|crontab|open)\b", rest):
+        refuse("the command changes files or the system.")
+    if re.search(r"\bfind\b[^|;&]*\s-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)\b", rest):
+        refuse("find may only list files here.")
+    if re.search(r"\b(perl|ruby)\b[^|;&]*\s-[a-zA-Z]*i", rest):
+        refuse("in-place editing is not allowed.")
+    if re.search(r"\$\(|`", unquoted):
+        refuse("command substitution hides what the command runs.")
+    # Running code is the runner's job (checks/), never the agent's: a file in the snapshot could be planted
+    # to run inside the review, and inline code (-e, -c, a heredoc, a pipe) is a deny-list's blind spot. So an
+    # interpreter may only say its version.
+    interp = r"(node|nodejs|tsx|ts-node|bun|deno|python[0-9.]*|ruby|perl|php|lua|Rscript|swift|osascript|jxa|(ba|z|da|k|c|tc|fi)?sh|source)"
+    lead = r"(^|[;&|(]\s*|\bxargs\s+(-[^ ]+\s+)*|\b(exec|time|nice|nohup|command|sudo)\s+|\benv\s+([A-Za-z_]+=\S*\s+)*)"
+    if re.search(lead + r"\.\s+\S", rest):
+        refuse("running code is not part of the review (the runner's checks are in checks/).")
+    for m in re.finditer(lead + r"(\S*/)?" + interp + r"\b([^|;&]*)", rest):
+        if not re.fullmatch(r"\s*(--version|-v|-V)\s*", m.group(m.lastindex)):
+            refuse("running code is not part of the review (the runner's checks are in checks/).")
+    # The same goes for the repository's own scripts, run by path (with or without VAR=value in front).
+    if re.search(lead + r"([A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(\./)?[\w./-]*\.(sh|py|mjs|cjs|js|ts|tsx|rb|pl|command)(\s|$|;|&|\|)", rest):
+        refuse("running the repository's scripts is not part of the review (the runner's checks are in checks/).")
+    if re.search(r"\b(require|import)\(\s*\\?[\"']\.", rest):
+        refuse("running the repository's code is not part of the review (the runner's checks are in checks/).")
+    if re.search(r"\bawk\b[^|;&]*(\bsystem\s*\(|\|\s*\\?[\"']|>\s*\\?[\"'])", rest):
+        refuse("awk may only read here.")
+    if re.search(r"\bgit\s+(-[^ ]+\s+)*(add|commit|push|pull|fetch|merge|rebase|reset|checkout|switch|restore|stash|cherry-pick|revert|clean|rm|mv|tag|filter-branch|gc|prune|worktree|submodule|am|apply|init|clone)\b", rest):
+        refuse("the command changes version control.")
+    if re.search(r"\b(npm|pnpm|yarn|bun)\s+(-[^ ]+\s+)*\w|\bnpx\s|\bpip3?\s|\buv\s|\bpoetry\s|\bbrew\s|\bdocker\b|\bvercel\b|\bfly(ctl)?\s|\bgh\s|\bpsql\b|\bpg_ctl\b|\bdropdb\b|\bcreatedb\b", rest):
+        if not re.search(r"\b(npm|pnpm|yarn|bun)\s+(ls|list|view|outdated)\b", rest):
+            refuse("package managers, databases and deploys are not part of this agent's job.")
+    if re.search(r"\bcurl\b|\bwget\b|\bssh\b|\bscp\b|\brsync\b|\bnc\b|\bncat\b|\btelnet\b|\bftp\b", rest):
+        refuse("this agent makes no requests itself: only the UAT harness talks to a running app.")
+    if re.search(r"\b(python3?|node|ruby|perl|php)\b", rest) and re.search(
+        r"open\([^()]*(,|mode=)\s*\\?[\"'](w|a|x|r\+)|write_(text|bytes)|writeFile|appendFile|copyFile|cpSync|createWriteStream|unlink|rename\(|rmSync|rmdir|os\.remove|os\.system|shutil|subprocess|child_process|socket|urllib|requests|https?\.(request|get)|http\.client|fetch\(", rest):
+        refuse("a script that writes files or reaches the network.")
+
+
+def main():
+    agent = sys.argv[1]
+    if agent not in ALL:
+        refuse(f"unknown agent {agent}")
+    root = os.path.normpath(os.environ["CLAUDE_PROJECT_DIR"])
+    data = json.load(sys.stdin)
+    tool = data.get("tool_name", "")
+    inp = data.get("tool_input", {}) or {}
+    if tool == "Bash":
+        check_bash(root, agent, inp.get("command", ""))
+    elif tool in ("Read", "Grep", "Glob"):
+        check_files(root, agent, tool, inp)
+    else:
+        refuse(f"{tool} is not available to the review agents.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as err:
+        refuse(f"the guard failed, so it refuses: {err}")

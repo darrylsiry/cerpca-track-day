@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The acceptance tests have their own tooling; review snapshots are copies.
+    "uat/**",
+    ".review/**",
   ]),
 ]);
 

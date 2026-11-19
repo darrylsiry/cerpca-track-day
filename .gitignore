@@ -47,3 +47,9 @@ next-env.d.ts
 # Source documents stay on this machine: not in GitHub, not uploaded to Vercel
 /CERPCA content/
 /*.docx
+
+# Review agents: private snapshots, logs and state; acceptance-test output
+/.review/
+/uat/.work/
+/uat/node_modules/
+/uat/test-results/

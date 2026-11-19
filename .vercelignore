@@ -20,3 +20,8 @@
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# Review agents and acceptance tests are not part of the deployed app
+/.review/
+/uat/
+/docs/agent-reports/

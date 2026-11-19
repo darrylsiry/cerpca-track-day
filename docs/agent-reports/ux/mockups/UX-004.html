@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><title>UX-004 Check-in shows what is missing</title>
+<style>
+body{margin:0;background:#eceef0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#14171a}
+.wrap{display:flex;gap:32px;padding:24px;flex-wrap:wrap}.col{width:560px}
+h1{font:800 18px "Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
+table{width:100%;background:#fff;border:1px solid #d5d9dd;border-radius:14px;border-collapse:separate;border-spacing:0;overflow:hidden}
+td{padding:8px 10px;border-top:1px solid #e3e6e9}tr:first-child td{border-top:0}
+.num{border:2px solid #14171a;border-radius:5px;font:800 15px "Arial Narrow",sans-serif;padding:0 5px}
+.p{border-radius:999px;padding:2px 9px;font-size:13px;font-weight:600}
+.g{background:#e3f4ea;color:#0d7a40}.w{background:#fff3cf;color:#8a5a00}.n{background:#e3e6e9;color:#444b52}
+.btn{border:1px solid #b3bac1;border-radius:10px;padding:5px 12px;font-weight:600;background:#fff;white-space:nowrap}
+.ghost{color:#0d7a40;font-weight:700}
+.undo{font-size:13px;color:#444b52;text-decoration:underline;margin-left:8px}
+.sheet{background:#fff;border-radius:18px;box-shadow:0 12px 32px -8px rgba(20,23,26,.28);padding:16px 18px;margin-top:12px}
+.sheet h2{font:800 22px "Arial Narrow",sans-serif;text-transform:uppercase;margin:0 0 8px}
+.li{padding:8px 0;border-top:1px solid #e3e6e9}
+.pri{background:#14171a;color:#fff;border-radius:10px;padding:8px 14px;font-weight:600;display:inline-block;margin-right:6px}
+.chg{outline:2px dashed #d1242a;outline-offset:2px}
+</style></head><body><div class="wrap">
+<div class="col"><h1>Before</h1><table>
+<tr><td><span class="num">171</span></td><td><b>Achebe, Desmond</b></td><td><span class="p g">3/3</span></td><td><span class="p g">✓ F26-017</span></td><td><span class="ghost">✓ In</span></td></tr>
+<tr><td><span class="num">55</span></td><td><b>Pruitt, Holly</b></td><td><span class="p w">0/3</span></td><td><span class="p n">Not started</span></td><td><span class="btn">Check in</span></td></tr>
+</table><p style="font-size:13px;color:#444b52">One tap checks Holly in. One tap on "✓ In" silently undoes Desmond.</p></div>
+<div class="col"><h1>After</h1><table>
+<tr><td><span class="num">171</span></td><td><b>Achebe, Desmond</b></td><td><span class="p g">3/3</span></td><td><span class="p g">✓ F26-017</span></td><td class="chg"><span class="p g">✓ In 6:50</span><span class="undo">Undo</span></td></tr>
+<tr><td><span class="num">55</span></td><td><b>Pruitt, Holly</b></td><td><span class="p w">0/3</span></td><td><span class="p n">Not started</span></td><td><span class="btn">Check in…</span></td></tr>
+</table>
+<div class="sheet chg"><h2>Check in Holly Pruitt?</h2>
+<div class="li">Waivers <b>0 of 3 signed</b>: hand her the tablet · <u>Open her waivers</u></div>
+<div class="li">Tech <b>not started</b>: she needs the stamped paper form at the tech shed</div>
+<div class="li" style="border-top:0;padding-top:12px"><span class="pri">Check in anyway</span><span class="btn">Not yet</span></div></div>
+</div></div></body></html>

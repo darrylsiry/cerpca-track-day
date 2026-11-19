@@ -1,0 +1,12 @@
+{
+  "name": "trackday-uat",
+  "private": true,
+  "description": "User-acceptance tests for the Track Day App. Run through scripts/uat.sh, not directly.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "^22"
+  }
+}
