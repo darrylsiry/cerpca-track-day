@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { TriangleAlert, Wand2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -16,10 +15,10 @@ import {
   SectionTitle,
   Stat,
 } from "@/components/ui";
-import { getDb, schema as s } from "@/db";
 import { plural } from "@/lib/cn";
 import { getRosterView } from "@/server/admin";
 import { requireAdmin } from "@/server/auth";
+import { livePairings } from "@/server/pairings";
 import { clearInstructorRequest, suggestPairings } from "./actions";
 import { AssignSelect } from "./assign-select";
 import { CheckInSheet } from "./check-in-sheet";
@@ -34,13 +33,10 @@ export default screen(async function PairingPage() {
         Create an event and its roster first.
       </EmptyState>
     );
-  const db = await getDb();
+  // Only pairings that still stand: a student whose instructor has left the event is unpaired again.
   const [{ rows }, assignments] = await Promise.all([
     getRosterView(v.event.id, v.org.id),
-    db
-      .select()
-      .from(s.instructorAssignments)
-      .where(eq(s.instructorAssignments.eventId, v.event.id)),
+    livePairings(v.event.id),
   ]);
 
   const groupById = new Map(v.groups.map((g) => [g.id, g]));

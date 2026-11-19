@@ -11,8 +11,8 @@ import { notifyUsers } from "./notify";
  * Runs once a minute (Vercel Cron in production, a timer in `next dev`). For
  * each published event happening today at its track, it finds the schedule
  * items that have just entered a reminder window and alerts the people in them.
- * `reminder_sends` makes each (item, lead time, start time) fire exactly once,
- * and a session that is rescheduled reminds again for its new time.
+ * `reminder_sends` makes each (item, lead time, day, start time) fire exactly
+ * once, and a session moved to another day or time reminds again.
  */
 export async function runReminders(
   now = new Date(),
@@ -83,6 +83,7 @@ export async function runReminders(
         .values({
           scheduleItemId: item.id,
           offsetMin: offset,
+          day: item.day,
           startMin: item.startMin,
         })
         .onConflictDoNothing()
@@ -112,7 +113,9 @@ export async function runReminders(
                   .map((a) => a.instructorId),
               ),
             ].filter(
-              (id) => !studentSet.has(id) && regs.some((r) => r.userId === id),
+              (id) =>
+                !studentSet.has(id) &&
+                regs.some((r) => r.userId === id && r.isInstructor),
             )
           : [];
 

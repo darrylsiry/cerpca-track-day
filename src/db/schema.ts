@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -230,6 +231,9 @@ export const scheduleItems = pgTable(
     groupParts: jsonb("group_parts").$type<Record<string, GroupPart>>().notNull().default({}),
     note: text("note"),
     cancelled: boolean("cancelled").notNull().default(false),
+    /** Where a published item was before it was moved, so screens can say "moved from 10:10". Null when it is where it started. */
+    movedFromDay: text("moved_from_day"),
+    movedFromMin: integer("moved_from_min"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("schedule_event_day").on(t.eventId, t.day)],
@@ -312,12 +316,13 @@ export const reminderSends = pgTable(
     id: id(),
     scheduleItemId: text("schedule_item_id").notNull(),
     offsetMin: integer("offset_min").notNull(),
-    /** Start time the reminder was sent for; a rescheduled session reminds again. */
+    /** Day and start time the reminder was sent for; a session moved to another day or time reminds again. */
+    day: text("day").notNull().default(""),
     startMin: integer("start_min").notNull(),
     recipients: integer("recipients").notNull().default(0),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("reminder_once").on(t.scheduleItemId, t.offsetMin, t.startMin)],
+  (t) => [uniqueIndex("reminder_once").on(t.scheduleItemId, t.offsetMin, t.day, t.startMin)],
 );
 
 /* ───────────── Waivers ───────────── */
@@ -538,6 +543,20 @@ export const otpCodes = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("otp_email").on(t.email)],
+);
+
+/**
+ * Counters that throttle sign-in: one row per limited thing and time window,
+ * added to in a single statement. Keys hold a hash, never an address.
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 );
 
 export const sessions = pgTable("sessions", {

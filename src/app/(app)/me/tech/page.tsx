@@ -1,15 +1,18 @@
 import { eq } from "drizzle-orm";
 import { Check, CircleAlert } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { Sheet } from "@/components/sheet";
 import { screen } from "@/components/shell/skeleton";
 import { buttonClass, CarNumber, DefList, EmptyState, Notice, PageHeader, Pill, type Tone } from "@/components/ui";
 import { getDb, schema as s } from "@/db";
+import { waiverCount } from "@/lib/clearance";
 import { cn, fullName } from "@/lib/cn";
 import { GRID_TECH_ITEMS, TECH_ITEMS } from "@/lib/tech-form";
 import { dateTime, dayFull, daysBetween, monthDay, zoned } from "@/lib/time";
 import { getViewer } from "@/server/auth";
+import { clearanceFor } from "@/server/clearance";
 import { isPdf } from "@/server/storage";
 import { carLabel, flagsFor, getInspection, inspectionWindow, listShops, sealCode, shopVerified } from "@/server/tech";
 import { FlagList, InspectionView, ShopBadge } from "../../admin/tech/_components/inspection-view";
@@ -78,8 +81,9 @@ export default screen(async function MyTechPage() {
 
   const db = await getDb();
   const event = v.event;
-  const [insp, shops, vehicleRows] = await Promise.all([
+  const [insp, clearance, shops, vehicleRows] = await Promise.all([
     getInspection(event.id, v.user.id),
+    clearanceFor(v.org.id, event.id, v.user.id),
     listShops(v.org.id),
     v.registration.vehicleId ? db.select().from(s.vehicles).where(eq(s.vehicles.id, v.registration.vehicleId)).limit(1) : Promise.resolve([]),
   ]);
@@ -111,6 +115,8 @@ export default screen(async function MyTechPage() {
   const signable = (status === "shop_signed" || status === "changes_requested") && shopOnFile;
   const cannotSign = signable && (failed > 0 || missing > 0);
   const sticker = Boolean(insp?.stickerIssuedAt);
+  // A sticker alone does not clear a driver: the waivers have to be signed too.
+  const waiversLeft = clearance.waiversLeft;
 
   // Where the window stands today.
   const toOpen = daysBetween(today, win.earliest);
@@ -132,9 +138,18 @@ export default screen(async function MyTechPage() {
     <div className="mx-auto max-w-3xl">
       {header}
 
-      {sticker ? (
+      {sticker && waiversLeft > 0 ? (
+        <Notice tone="warn" title="Your car has its sticker, but you are not cleared to drive yet" className="mb-4">
+          <p>
+            Tech sticker <span className="timing font-bold">{insp!.stickerNumber}</span> is on your car. You still need to sign {waiverCount(waiversLeft)} before you go on track.
+          </p>
+          <Link href="/me/waivers" className={buttonClass("primary", "sm", "mt-2.5")}>
+            Sign {waiversLeft === 1 ? "it" : "them"} now
+          </Link>
+        </Notice>
+      ) : sticker ? (
         <Notice tone="good" title="You are cleared to drive" className="mb-4">
-          Tech sticker <span className="timing font-bold">{insp!.stickerNumber}</span> is on your car.
+          Your waivers are signed and tech sticker <span className="timing font-bold">{insp!.stickerNumber}</span> is on your car.
         </Notice>
       ) : status === "changes_requested" ? (
         <Notice tone="bad" title="The tech team sent your form back" className="mb-4">

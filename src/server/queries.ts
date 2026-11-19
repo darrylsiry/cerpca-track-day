@@ -4,6 +4,7 @@ import type { RunGroup, User, Vehicle } from "@/db/schema";
 import { eachDay } from "@/lib/time";
 import type { GroupLite, ScheduleEntry } from "@/lib/types";
 import type { Viewer } from "./auth";
+import { clearanceFor } from "./clearance";
 
 /* Read models shared by several screens. Feature-specific reads live beside their pages. */
 
@@ -15,6 +16,7 @@ export const groupLite = (g: RunGroup): GroupLite => ({
   textColor: g.textColor,
   sortOrder: g.sortOrder,
   split: g.instructorPolicy === "optional",
+  instructorPolicy: g.instructorPolicy,
 });
 
 export async function getSchedule(eventId: string): Promise<ScheduleEntry[]> {
@@ -33,6 +35,8 @@ export async function getSchedule(eventId: string): Promise<ScheduleEntry[]> {
     groupParts: r.groupParts ?? {},
     note: r.note,
     cancelled: r.cancelled,
+    movedFromDay: r.movedFromDay,
+    movedFromMin: r.movedFromMin,
   }));
 }
 
@@ -53,6 +57,8 @@ export type PersonCard = {
   instructorRequestNote: string | null;
   attendsDay1: boolean;
   attendsDay2: boolean;
+  /** Instructing at this event. */
+  isInstructor: boolean;
 };
 
 /** Students assigned to an instructor at an event, and the instructor assigned to a student. */
@@ -68,11 +74,12 @@ export async function getAssignments(eventId: string, userId: string) {
   const people = ids.length ? await getPeople(eventId, ids) : new Map<string, PersonCard>();
   return {
     students: studentIds.map((id) => people.get(id)).filter((p): p is PersonCard => Boolean(p)),
-    instructor: instructorId ? (people.get(instructorId) ?? null) : null,
+    // An instructor who has left the event, or stopped instructing at it, is nobody's instructor.
+    instructor: (instructorId && people.get(instructorId)?.isInstructor ? people.get(instructorId) : null) ?? null,
   };
 }
 
-/** Registration-level cards for a set of people at an event. */
+/** Registration-level cards for a set of people at an event. Cancelled registrations are left out. */
 export async function getPeople(eventId: string, userIds: string[]): Promise<Map<string, PersonCard>> {
   const db = await getDb();
   if (!userIds.length) return new Map();
@@ -81,11 +88,11 @@ export async function getPeople(eventId: string, userIds: string[]): Promise<Map
     .from(s.registrations)
     .innerJoin(s.users, eq(s.users.id, s.registrations.userId))
     .leftJoin(s.vehicles, eq(s.vehicles.id, s.registrations.vehicleId))
-    .where(and(eq(s.registrations.eventId, eventId), inArray(s.registrations.userId, userIds)));
+    .where(and(eq(s.registrations.eventId, eventId), inArray(s.registrations.userId, userIds), ne(s.registrations.status, "cancelled")));
   return new Map(
     rows.map((r) => [
       r.user.id,
-      { user: r.user, vehicle: r.vehicle, groupId: r.reg.runGroupId, carNumber: r.reg.carNumber, solo: r.reg.solo, instructorRequest: r.reg.instructorRequest, instructorRequestNote: r.reg.instructorRequestNote, attendsDay1: r.reg.attendsDay1, attendsDay2: r.reg.attendsDay2 },
+      { user: r.user, vehicle: r.vehicle, groupId: r.reg.runGroupId, carNumber: r.reg.carNumber, solo: r.reg.solo, instructorRequest: r.reg.instructorRequest, instructorRequestNote: r.reg.instructorRequestNote, attendsDay1: r.reg.attendsDay1, attendsDay2: r.reg.attendsDay2, isInstructor: r.reg.isInstructor },
     ]),
   );
 }
@@ -113,31 +120,10 @@ export function viewerDays(v: Viewer): string[] {
   return days.filter((_, i) => (i === 0 ? v.registration!.attendsDay1 : i === 1 ? v.registration!.attendsDay2 : true));
 }
 
-/** The viewer's paperwork for the event in focus: waivers and tech. */
+/** The viewer's paperwork for the event in focus: waivers, tech form and sticker. */
 export async function getChecklist(v: Viewer) {
   if (!v.event) return null;
-  const db = await getDb();
-  const templates = await db
-    .select()
-    .from(s.waiverTemplates)
-    .where(and(eq(s.waiverTemplates.orgId, v.org.id), eq(s.waiverTemplates.active, true)))
-    .orderBy(asc(s.waiverTemplates.sortOrder));
-  const signed = await db
-    .select({ templateId: s.waiverSignatures.templateId, version: s.waiverSignatures.templateVersion })
-    .from(s.waiverSignatures)
-    .where(and(eq(s.waiverSignatures.eventId, v.event.id), eq(s.waiverSignatures.userId, v.user.id)));
-  const required = templates.filter((t) => t.required);
-  const signedIds = new Set(signed.map((x) => x.templateId));
-  const [tech] = await db
-    .select()
-    .from(s.techInspections)
-    .where(and(eq(s.techInspections.eventId, v.event.id), eq(s.techInspections.userId, v.user.id)))
-    .limit(1);
-  return {
-    waiversTotal: required.length,
-    waiversSigned: required.filter((t) => signedIds.has(t.id)).length,
-    tech: tech ?? null,
-  };
+  return clearanceFor(v.org.id, v.event.id, v.user.id);
 }
 
 /** Counts that drive the badges in the admin navigation. */

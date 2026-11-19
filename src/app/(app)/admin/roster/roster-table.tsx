@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { cn, plural } from "@/lib/cn";
 import { TECH_STATUS } from "@/lib/tech-form";
+import { drivesSolo } from "@/lib/instruction";
 import type { GroupLite } from "@/lib/types";
 import type { RosterEntry } from "@/server/admin";
 import { importRoster, setCheckedIn, type ImportState } from "./actions";
@@ -224,9 +225,9 @@ export function RosterTable({
                         <GroupChip group={groupById.get(r.groupId)} size="sm" />
                         {/* A split group (Blue) names both halves; elsewhere only solo is worth saying. */}
                         {!r.isInstructor &&
-                        (r.solo || groupById.get(r.groupId)?.split) ? (
+                        (drivesSolo(groupById.get(r.groupId)?.instructorPolicy, r) || groupById.get(r.groupId)?.split) ? (
                           <span className="ml-1.5 text-[13px] text-ink-3">
-                            {r.solo ? "Solo" : "Instructed"}
+                            {drivesSolo(groupById.get(r.groupId)?.instructorPolicy, r) ? "Solo" : "Instructed"}
                           </span>
                         ) : null}
                       </td>
@@ -397,8 +398,11 @@ function ImportSheet() {
       {state.step === "done" ? (
         <Notice tone="good" title="Import finished">
           {plural(state.created, "person", "people")} added, {state.updated}{" "}
-          updated{state.skipped ? `, ${state.skipped} skipped` : ""}. Close this
-          panel to see the roster.
+          updated{state.skipped ? `, ${state.skipped} skipped` : ""}.
+          {state.kept
+            ? ` ${plural(state.kept, "person", "people")} kept the run group they have in the app.`
+            : ""}{" "}
+          Close this panel to see the roster.
         </Notice>
       ) : (
         <form action={action} className="space-y-4">
@@ -503,6 +507,33 @@ function ImportSheet() {
                   </tbody>
                 </table>
               </div>
+              {state.differences.length ? (
+                <Notice
+                  tone="warn"
+                  title={`${plural(state.differences.length, "person is", "people are")} in a different run group in the app`}
+                >
+                  <p>
+                    Promotions and group changes are made in the app, so the
+                    app&apos;s group is kept unless you choose otherwise.
+                  </p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {state.differences.slice(0, 8).map((d) => (
+                      <li key={d.name}>
+                        <strong>{d.name}</strong>: file says {d.fileGroup}, app
+                        has {d.appGroup}
+                        {d.where === "member" ? " (promoted since)" : ""}
+                      </li>
+                    ))}
+                    {state.differences.length > 8 ? (
+                      <li>and {state.differences.length - 8} more</li>
+                    ) : null}
+                  </ul>
+                  <label className="mt-2.5 flex items-center gap-2.5 font-semibold">
+                    <input type="checkbox" name="fileGroups" className="check" />
+                    Use the file&apos;s run group for them instead
+                  </label>
+                </Notice>
+              ) : null}
               <SubmitButton
                 name="intent"
                 value="commit"

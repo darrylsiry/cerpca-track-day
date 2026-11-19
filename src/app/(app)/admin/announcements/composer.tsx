@@ -186,8 +186,8 @@ export function Composer({
         </fieldset>
 
         <CheckRow name="urgent">
-          <strong>Urgent.</strong> Highlighted in yellow at the top of
-          everyone&apos;s Now screen.
+          <strong>Urgent.</strong> Stays in yellow at the top of each
+          person&apos;s Now screen until they tap &quot;Got it&quot;.
         </CheckRow>
 
         <SubmitButton

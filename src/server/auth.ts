@@ -1,13 +1,14 @@
-import { createHash, randomBytes, randomInt } from "node:crypto";
-import { and, asc, desc, eq, gt, gte, isNull } from "drizzle-orm";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { and, asc, desc, eq, gt, gte, isNull, lt, sql } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { cache } from "react";
 import { getDb, schema as s } from "@/db";
 import type { EventRow, Membership, Organization, Registration, RunGroup, Track, User } from "@/db/schema";
 import { zoned, type ZonedNow } from "@/lib/time";
-import { sendEmail } from "./notify";
+import { channelStatus, sendEmail } from "./notify";
+import { withinLimit } from "./rate-limit";
 
 export const SESSION_COOKIE = "td_session";
 export const EVENT_COOKIE = "td_event";
@@ -66,50 +67,108 @@ export const getSessionUser = cache(async (): Promise<User | null> => {
 
 /* ───────────── One-time sign-in codes ───────────── */
 
-export async function issueSignInCode(rawEmail: string): Promise<{ devCode?: string }> {
-  const email = rawEmail.trim().toLowerCase();
-  const db = await getDb();
-  const [user] = await db.select().from(s.users).where(eq(s.users.email, email)).limit(1);
-  // Same answer whether or not the address is on a roster, so the form can't be used to probe for members.
-  if (!user) return {};
+const CODE_MINUTES = 10;
+/** Guesses allowed against one code. */
+const CODE_ATTEMPTS = 5;
+/*
+ * Limits on asking for codes and on guessing them. Each use is counted in one
+ * statement before anything else happens (see ./rate-limit), so a burst of
+ * requests cannot share a budget.
+ *
+ *  - Per email: 5 codes in 15 minutes, and 10 guesses an hour across all of an
+ *    address's codes. At 10 guesses an hour a 6-digit code cannot be found by
+ *    guessing, however many fresh codes are requested.
+ *  - Per network address: generous, because a whole paddock can share one
+ *    address on the track's Wi-Fi on the morning of an event. It stops one
+ *    machine from working through many accounts.
+ */
+const LIMIT = {
+  codesPerEmail: { n: 5, minutes: 15 },
+  codesPerAddress: { n: 100, minutes: 15 },
+  triesPerEmail: { n: 10, minutes: 60 },
+  triesPerAddress: { n: 300, minutes: 15 },
+};
 
-  const recent = await db
-    .select({ id: s.otpCodes.id })
-    .from(s.otpCodes)
-    .where(and(eq(s.otpCodes.email, email), gt(s.otpCodes.createdAt, new Date(Date.now() - 15 * 60000))));
-  if (recent.length >= 5) return {};
-
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  await db.insert(s.otpCodes).values({ email, codeHash: sha(`${email}:${code}`), expiresAt: new Date(Date.now() + 10 * 60000) });
-  const result = await sendEmail({
-    to: email,
-    subject: `${code} is your Track Day sign-in code`,
-    text: `Your sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not ask for this, you can ignore this email.`,
-    userId: user.id,
-    kind: "signin",
-    redactBody: true,
-  });
-  // With no email provider configured, demo mode shows the code on screen instead.
-  return result === "simulated" && demoMode() ? { devCode: code } : {};
+/** Count this request against its email and (when known) network address. False when either is over its limit. */
+async function allowed(kind: "code" | "try", email: string): Promise<boolean> {
+  const perEmail = kind === "code" ? LIMIT.codesPerEmail : LIMIT.triesPerEmail;
+  const perAddress = kind === "code" ? LIMIT.codesPerAddress : LIMIT.triesPerAddress;
+  const ip = await clientIp();
+  const [emailOk, addressOk] = await Promise.all([
+    withinLimit(`signin:${kind}:email`, email, perEmail.n, perEmail.minutes),
+    // Without a proxy in front there is no address to count by; the per-email limits still apply.
+    ip ? withinLimit(`signin:${kind}:address`, ip, perAddress.n, perAddress.minutes) : true,
+  ]);
+  return emailOk && addressOk;
 }
 
-export async function verifySignInCode(rawEmail: string, code: string): Promise<User | null> {
+export async function issueSignInCode(rawEmail: string): Promise<{ devCode?: string; limited?: boolean }> {
   const email = rawEmail.trim().toLowerCase();
+  if (!(await allowed("code", email))) return { limited: true };
   const db = await getDb();
-  const [row] = await db
-    .select()
+  const [user] = await db.select().from(s.users).where(eq(s.users.email, email)).limit(1);
+
+  // The same work is done whether or not the address is on a roster, so neither the answer nor how
+  // long it takes can be used to probe for members. An address that is not gets a code nobody knows.
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  await db.delete(s.otpCodes).where(lt(s.otpCodes.expiresAt, new Date(Date.now() - 86_400_000)));
+  await db.insert(s.otpCodes).values({
+    email,
+    codeHash: user ? sha(`${email}:${code}`) : sha(randomBytes(32).toString("hex")),
+    expiresAt: new Date(Date.now() + CODE_MINUTES * 60000),
+  });
+  if (!user) return {};
+
+  // The email goes out after the answer has been sent, for the same reason.
+  after(async () => {
+    await sendEmail({
+      to: email,
+      subject: `${code} is your Track Day sign-in code`,
+      text: `Your sign-in code is ${code}. It expires in ${CODE_MINUTES} minutes.\n\nIf you did not ask for this, you can ignore this email.`,
+      userId: user.id,
+      kind: "signin",
+      redactBody: true,
+    });
+  });
+  // With no email provider configured, demo mode shows the code on screen instead.
+  return !channelStatus().email && demoMode() ? { devCode: code } : {};
+}
+
+/** Check a sign-in code. `limited` means too many guesses were made and this one was not looked at. */
+export async function verifySignInCode(rawEmail: string, code: string): Promise<{ user: User | null; limited: boolean }> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!(await allowed("try", email))) return { user: null, limited: true };
+  const wrong = { user: null, limited: false };
+  const db = await getDb();
+  const now = new Date();
+  const [latest] = await db
+    .select({ id: s.otpCodes.id })
     .from(s.otpCodes)
-    .where(and(eq(s.otpCodes.email, email), isNull(s.otpCodes.consumedAt), gt(s.otpCodes.expiresAt, new Date())))
+    .where(and(eq(s.otpCodes.email, email), isNull(s.otpCodes.consumedAt), gt(s.otpCodes.expiresAt, now)))
     .orderBy(desc(s.otpCodes.createdAt))
     .limit(1);
-  if (!row || row.attempts >= 5) return null;
-  if (row.codeHash !== sha(`${email}:${code.trim()}`)) {
-    await db.update(s.otpCodes).set({ attempts: row.attempts + 1 }).where(eq(s.otpCodes.id, row.id));
-    return null;
-  }
-  await db.update(s.otpCodes).set({ consumedAt: new Date() }).where(eq(s.otpCodes.id, row.id));
+  if (!latest) return wrong;
+
+  // Count the guess before looking at it, in one statement: guesses that arrive together each use one of the code's attempts.
+  const [claimed] = await db
+    .update(s.otpCodes)
+    .set({ attempts: sql`${s.otpCodes.attempts} + 1` })
+    .where(and(eq(s.otpCodes.id, latest.id), lt(s.otpCodes.attempts, CODE_ATTEMPTS), isNull(s.otpCodes.consumedAt), gt(s.otpCodes.expiresAt, now)))
+    .returning({ codeHash: s.otpCodes.codeHash });
+  if (!claimed) return wrong;
+  const given = Buffer.from(sha(`${email}:${code.trim()}`), "hex");
+  const stored = Buffer.from(claimed.codeHash, "hex");
+  if (given.length !== stored.length || !timingSafeEqual(given, stored)) return wrong;
+
+  // A code opens one session: only the request that marks it used goes on.
+  const [used] = await db
+    .update(s.otpCodes)
+    .set({ consumedAt: now })
+    .where(and(eq(s.otpCodes.id, latest.id), isNull(s.otpCodes.consumedAt)))
+    .returning({ id: s.otpCodes.id });
+  if (!used) return wrong;
   const [user] = await db.select().from(s.users).where(eq(s.users.email, email)).limit(1);
-  return user ?? null;
+  return { user: user ?? null, limited: false };
 }
 
 /* ───────────── The viewer: who is looking, at which event, in what role ───────────── */

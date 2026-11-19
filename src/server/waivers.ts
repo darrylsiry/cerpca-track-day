@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { getDb, schema as s } from "@/db";
 import type { WaiverSignature, WaiverTemplate } from "@/db/schema";
+import { isCurrent } from "@/lib/clearance";
 import { getRoster, type RosterRow } from "./queries";
 
 /** Documents drivers are asked to sign, in display order. */
@@ -28,9 +29,7 @@ export async function signaturesFor(eventId: string, userId: string): Promise<Ma
   return new Map(rows.map((r) => [r.templateId, r]));
 }
 
-/** A signature only counts while it is for the template's current version. */
-export const isCurrent = (template: Pick<WaiverTemplate, "version">, sig?: Pick<WaiverSignature, "templateVersion"> | null) =>
-  Boolean(sig && sig.templateVersion >= template.version);
+export { isCurrent };
 
 export type WaiverCell = { signedAt: Date; version: number; current: boolean };
 export type WaiverMatrixRow = {
@@ -68,7 +67,7 @@ export async function waiverMatrix(orgId: string, eventId: string): Promise<{ te
     let outstanding = 0;
     for (const t of templates) {
       const sig = mine.find((x) => x.templateId === t.id);
-      const current = Boolean(sig && sig.version >= t.version);
+      const current = isCurrent(t, sig ? { templateVersion: sig.version } : null);
       if (sig) cells[t.id] = { signedAt: sig.signedAt, version: sig.version, current };
       if (t.required && !current) outstanding += 1;
     }

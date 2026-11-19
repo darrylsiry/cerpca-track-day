@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { dayItems, phaseOf } from "@/lib/schedule";
-import { clock, dateRange, monthDay, toTimeInput, weekday } from "@/lib/time";
+import { clock, dateRange, leadTimes, monthDay, toTimeInput, weekday } from "@/lib/time";
 import { orgEvents } from "@/server/admin";
 import { requireAdmin } from "@/server/auth";
 import { eventDays, getSchedule, groupLite } from "@/server/queries";
@@ -60,12 +60,18 @@ export default screen(async function AdminSchedulePage({
   const today = dayItems(items, day);
   const published = v.event.status === "published";
   const others = events.filter((e) => e.id !== v.event!.id).reverse();
+  // Quoted from the region's settings, so the editor never promises times the reminders do not use.
+  const lead = leadTimes(v.org.settings.reminderOffsets);
 
   return (
     <>
       <PageHeader
         title="Schedule editor"
-        lede="Changes reach every open app within about 20 seconds. Reminders go out 15, 10 and 5 minutes before each session to the run groups in it."
+        lede={`Changes reach every open app within about 20 seconds. ${
+          lead
+            ? `Reminders go out ${lead} before each session to the run groups in it.`
+            : "No reminder times are set, so no reminders go out. Add them under Settings."
+        }`}
         actions={
           <>
             <AddItemSheet

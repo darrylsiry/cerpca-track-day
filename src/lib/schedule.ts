@@ -1,5 +1,5 @@
 import type { GroupPart, ScheduleEntry } from "./types";
-import type { ZonedNow } from "./time";
+import { clock, weekday, type ZonedNow } from "./time";
 
 /**
  * Whether a driver is in a schedule item's run groups. A group can be limited
@@ -36,8 +36,12 @@ export type ScheduleLens = {
   days?: string[];
 };
 
-export function relevance(item: ScheduleEntry, lens: ScheduleLens): Relevance {
-  if (item.cancelled) return null;
+/**
+ * A cancelled item matters to nobody, unless `includeCancelled` is set: screens
+ * that list a person's day use it to show the session as off instead of hiding it.
+ */
+export function relevance(item: ScheduleEntry, lens: ScheduleLens, opts: { includeCancelled?: boolean } = {}): Relevance {
+  if (item.cancelled && !opts.includeCancelled) return null;
   if (lens.days && !lens.days.includes(item.day)) return null;
   if (item.audience === "all") return "mine";
   if (item.audience === "instructors") return lens.instructing ? "mine" : null;
@@ -106,14 +110,28 @@ export function liveBoard(items: ScheduleEntry[], eventDays: string[], now: Zone
   return { state, day, isToday, onTrack, nextTrack, alsoNow, progress };
 }
 
-/** The viewer's own current and upcoming items on a day. */
+/** "moved from 10:10 AM" (with the day when that changed too), or null when the item is where it started. */
+export function movedFrom(item: Pick<ScheduleEntry, "day" | "startMin" | "movedFromDay" | "movedFromMin">): string | null {
+  if (item.movedFromMin === null || item.movedFromMin === undefined) return null;
+  const otherDay = item.movedFromDay && item.movedFromDay !== item.day ? item.movedFromDay : null;
+  if (!otherDay && item.movedFromMin === item.startMin) return null;
+  return `moved from ${otherDay ? `${weekday(otherDay)} ` : ""}${clock(item.movedFromMin)}`;
+}
+
+/**
+ * The viewer's own items on a day. `all` keeps cancelled items so they can be
+ * shown as off; `current`, `upcoming` and `nextTrack` skip them; `cancelledAhead`
+ * lists the ones that have not passed yet, so "your next" can say what it skipped.
+ */
 export function myDay(items: ScheduleEntry[], day: string, lens: ScheduleLens, now: ZonedNow) {
   const mine = dayItems(items, day)
-    .map((item) => ({ item, why: relevance(item, lens) }))
+    .map((item) => ({ item, why: relevance(item, lens, { includeCancelled: true }) }))
     .filter((x): x is { item: ScheduleEntry; why: "mine" | "student" } => x.why !== null);
+  const running = mine.filter((x) => !x.item.cancelled);
   const isToday = day === now.day;
-  const current = isToday ? mine.filter((x) => x.item.startMin <= now.minutes && now.minutes < x.item.endMin) : [];
-  const upcoming = mine.filter((x) => (isToday ? x.item.startMin > now.minutes : day > now.day));
+  const current = isToday ? running.filter((x) => x.item.startMin <= now.minutes && now.minutes < x.item.endMin) : [];
+  const upcoming = running.filter((x) => (isToday ? x.item.startMin > now.minutes : day > now.day));
   const nextTrack = upcoming.find((x) => x.item.kind === "track" && x.why === "mine") ?? null;
-  return { all: mine, current, upcoming, nextTrack };
+  const cancelledAhead = mine.filter((x) => x.item.cancelled && (isToday ? x.item.endMin > now.minutes : day > now.day));
+  return { all: mine, current, upcoming, nextTrack, cancelledAhead };
 }

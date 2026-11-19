@@ -6,7 +6,7 @@ import { useTrackNow } from "@/components/clock";
 import { GroupBar, ItemGroups, KIND, KindIcon } from "@/components/schedule-bits";
 import { Pill } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { dayItems, liveBoard, myDay, phaseOf, relevance, secondsUntil, studentsIn, type ScheduleLens } from "@/lib/schedule";
+import { dayItems, liveBoard, movedFrom, myDay, phaseOf, relevance, secondsUntil, studentsIn, type ScheduleLens } from "@/lib/schedule";
 import { clock, clockParts, countdown, dayLong, duration, monthDay, weekday, weekdayShort, type ZonedNow } from "@/lib/time";
 import type { GroupLite, ScheduleEntry } from "@/lib/types";
 
@@ -53,7 +53,8 @@ export function ScheduleView({ items, groups, days, lens, registered, initialDay
 
   const matches = (item: ScheduleEntry) => {
     if (show === "all") return true;
-    if (show === "mine") return relevance(item, lens) !== null;
+    // A cancelled session stays in "Mine only", struck through, so it is seen to be off rather than missing.
+    if (show === "mine") return relevance(item, lens, { includeCancelled: true }) !== null;
     if (show === "classroom") return item.kind === "classroom";
     return item.groupIds.includes(show) || item.audience === "all";
   };
@@ -270,6 +271,7 @@ function Row({ item, now, groups, why, studentLabel }: { item: ScheduleEntry; no
           <span>{KIND[item.kind]?.label ?? "Info"}</span>
           {item.location ? <span>· {item.location}</span> : null}
           <span className="timing">· until {clock(item.endMin)}</span>
+          {!item.cancelled && movedFrom(item) ? <span className="font-semibold text-warn">· {movedFrom(item)}</span> : null}
           {item.groupIds.length > 1 || Object.keys(item.groupParts).length ? <ItemGroups item={item} groups={groups} /> : null}
         </p>
         {item.note ? <p className="mt-1 text-sm text-ink-2">{item.note}</p> : null}

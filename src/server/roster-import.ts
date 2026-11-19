@@ -25,6 +25,8 @@ export type ImportRow = {
   tshirtSize: string | null;
   groupId: string | null;
   groupLabel: string;
+  /** True when the export's group label says so ("Blue Solo"). */
+  solo: boolean;
   carNumber: string | null;
   year: number | null;
   make: string | null;
@@ -310,6 +312,7 @@ export function parseRosterFile(
       tshirtSize: clean(get("tshirtSize")),
       groupId: group?.id ?? null,
       groupLabel,
+      solo: /\bsolo\b/i.test(groupLabel),
       carNumber: clean(get("carNumber")),
       year,
       make,

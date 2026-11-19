@@ -3,6 +3,8 @@
 import { and, eq, gte } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { getDb, schema as s } from "@/db";
+import type { ScheduleItem } from "@/db/schema";
+import { plural } from "@/lib/cn";
 import {
   clock,
   daysBetween,
@@ -40,15 +42,41 @@ function audienceOf(item: {
   return null;
 }
 
-/** Record a schedule change as an announcement and push it to the people it affects. */
+/**
+ * Remember where a published session started out, so drivers can be shown
+ * "moved from 10:10". Moving it back to that spot clears the note; a draft
+ * event's schedule is still being planned, so nothing is recorded for it.
+ */
+function movedFromFor(
+  v: EventViewer,
+  before: ScheduleItem,
+  day: string,
+  startMin: number,
+): { movedFromDay?: string | null; movedFromMin?: number | null } {
+  const fromDay = before.movedFromDay ?? before.day;
+  const fromMin = before.movedFromMin ?? before.startMin;
+  if (fromDay === day && fromMin === startMin)
+    return { movedFromDay: null, movedFromMin: null };
+  if (before.movedFromMin !== null || v.event.status !== "published") return {};
+  return { movedFromDay: before.day, movedFromMin: before.startMin };
+}
+
+/**
+ * Record a schedule change as an announcement and push it to the people it
+ * affects. `only` narrows the recipients to part of the audience, for the
+ * people a session is no longer for.
+ */
 async function announceChange(
   v: EventViewer,
   audience: AnnouncementAudience,
   title: string,
   body: string,
+  only?: string[],
 ) {
   const db = await getDb();
-  const userIds = await audienceUserIds(v.event.id, v.org.id, audience);
+  const userIds =
+    only ?? (await audienceUserIds(v.event.id, v.org.id, audience));
+  if (!userIds.length) return;
   const [row] = await db
     .insert(s.announcements)
     .values({
@@ -135,6 +163,8 @@ export async function saveItem(
     };
     const db = await getDb();
     let changed = "";
+    // The people this item was for before the edit: they are told if it is no longer theirs.
+    let was: { audience: AnnouncementAudience; text: string } | null = null;
     if (id) {
       const [before] = await db
         .select()
@@ -149,8 +179,14 @@ export async function saveItem(
       if (!before) return fail("That item was removed by someone else.");
       await db
         .update(s.scheduleItems)
-        .set(values)
+        .set({ ...values, ...movedFromFor(v, before, day, startMin) })
         .where(eq(s.scheduleItems.id, id));
+      const wasFor = before.cancelled ? null : audienceOf(before);
+      if (wasFor)
+        was = {
+          audience: wasFor,
+          text: `${before.title} on ${weekday(before.day)} at ${clock(before.startMin)} is no longer on your schedule.`,
+        };
       if (before.startMin !== startMin || before.day !== day)
         changed = `${title} moves from ${clock(before.startMin)} to ${weekday(day)} ${clock(startMin)}.`;
       else if (before.endMin !== endMin)
@@ -164,11 +200,28 @@ export async function saveItem(
       changed = `Added: ${title}, ${weekday(day)} ${clock(startMin)} to ${clock(endMin)}.`;
     }
     await bumpSchedule(v.event.id);
-    const audienceForNotice = audienceOf({ audience, groupIds, groupParts });
-    if (bool(fd, "notify") && audienceForNotice)
-      await announceChange(v, audienceForNotice, "Schedule change", changed);
+    let told = "";
+    if (bool(fd, "notify")) {
+      const now = audienceOf({ audience, groupIds, groupParts });
+      const nowIds = now
+        ? await audienceUserIds(v.event.id, v.org.id, now)
+        : [];
+      // Changing who a session is for takes it away from someone: they hear about it too.
+      const lost = was
+        ? (await audienceUserIds(v.event.id, v.org.id, was.audience)).filter(
+            (u) => !nowIds.includes(u),
+          )
+        : [];
+      if (now) await announceChange(v, now, "Schedule change", changed, nowIds);
+      if (was && lost.length)
+        await announceChange(v, was.audience, "Schedule change", was.text, lost);
+      const people = nowIds.length + lost.length;
+      told = people
+        ? `, and ${plural(people, "person", "people")} alerted`
+        : ", and nobody needed an alert";
+    }
     refresh();
-    return ok(id ? "Schedule updated" : "Added to the schedule");
+    return ok(`${id ? "Schedule updated" : "Added to the schedule"}${told}`);
   } catch (err) {
     return asFailure(err);
   }
@@ -282,6 +335,7 @@ export async function shiftSchedule(
           startMin: i.startMin + minutes,
           endMin: i.endMin + minutes,
           updatedAt: new Date(),
+          ...movedFromFor(v, i, i.day, i.startMin + minutes),
         })
         .where(eq(s.scheduleItems.id, i.id));
     }

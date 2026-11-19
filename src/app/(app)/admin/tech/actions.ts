@@ -4,11 +4,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { getDb, schema as s } from "@/db";
 import type { TechInspection } from "@/db/schema";
+import { waiverCount } from "@/lib/clearance";
 import { fullName } from "@/lib/cn";
 import { emptyTechForm, GRID_TECH_ITEMS } from "@/lib/tech-form";
 import { monthDay } from "@/lib/time";
 import type { ActionResult } from "@/lib/types";
 import { requireAdmin, requireEvent } from "@/server/auth";
+import { clearanceFor } from "@/server/clearance";
 import { notifyUsers } from "@/server/notify";
 import { getRoster } from "@/server/queries";
 import {
@@ -361,17 +363,25 @@ export async function saveGridTech(
       .update(s.registrations)
       .set({ checkedInAt: now })
       .where(and(eq(s.registrations.eventId, v.event.id), eq(s.registrations.userId, userId), isNull(s.registrations.checkedInAt)));
+    // The sticker clears the car, not the driver: say so when waivers are still unsigned.
+    const { waiversLeft } = await clearanceFor(v.org.id, v.event.id, userId);
     await notifyUsers({
       userIds: [userId],
       title: `Tech sticker ${number} issued`,
-      body: "Your car passed grid tech and is cleared to go on track. Keep the sticker on the windshield for the whole event.",
-      href: "/me/tech",
+      body: waiversLeft
+        ? `Your car passed grid tech. You still need to sign ${waiverCount(waiversLeft)} before you can drive. Keep the sticker on the windshield for the whole event.`
+        : "Your car passed grid tech and you are cleared to go on track. Keep the sticker on the windshield for the whole event.",
+      href: waiversLeft ? "/me/waivers" : "/me/tech",
       kind: "tech",
       eventId: v.event.id,
       channels: ["inapp"],
     });
     refresh();
-    return ok(`Sticker ${number} issued`);
+    return ok(
+      waiversLeft
+        ? `Sticker ${number} issued. Not cleared yet: ${waiverCount(waiversLeft)} to sign`
+        : `Sticker ${number} issued`,
+    );
   } catch (err) {
     return asFailure(err);
   }

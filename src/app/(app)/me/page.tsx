@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { signOut } from "@/app/login/actions";
 import { PushToggle } from "@/components/push-toggle";
+import { ScrollToHash } from "@/components/scroll-to-hash";
 import { screen } from "@/components/shell/skeleton";
 import { Card, CarNumber, DefList, EmptyState, GroupChip, PageHeader, Pill } from "@/components/ui";
 import { cn, fullName, initials, vehicleLabel } from "@/lib/cn";
@@ -59,6 +60,8 @@ export default screen(async function ProfilePage() {
 
   return (
     <>
+      {/* "Notification settings" on the Alerts screen links to /me#notifications. */}
+      <ScrollToHash />
       <PageHeader title="Profile and car" />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start lg:gap-6">

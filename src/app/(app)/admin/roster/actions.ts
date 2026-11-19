@@ -1,14 +1,29 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { getDb, schema as s } from "@/db";
+import type { RunGroup } from "@/db/schema";
+import { plural } from "@/lib/cn";
 import type { ActionResult } from "@/lib/types";
 import { requireAdmin, requireEvent } from "@/server/auth";
+import { endPairings } from "@/server/pairings";
 import { parseRosterFile, type ImportPreview } from "@/server/roster-import";
 import { asFailure, bool, fail, intOrNull, ok, str } from "@/server/util";
 
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+/** What ending someone's pairings means for the administrator, as the tail of a confirmation. */
+function pairingsEnded(ended: Awaited<ReturnType<typeof endPairings>>): string {
+  const parts: string[] = [];
+  if (ended.needInstructor)
+    parts.push(
+      `${plural(ended.needInstructor, "student")} now ${ended.needInstructor === 1 ? "needs" : "need"} a new instructor: pair them under Instructor pairing`,
+    );
+  else if (ended.students) parts.push("their students have been told");
+  if (ended.instructors) parts.push("their instructor has been told");
+  return parts.length ? `. ${parts.join(", and ")}` : "";
+}
 
 export async function setCheckedIn(
   regId: string,
@@ -170,12 +185,20 @@ export async function savePerson(
         ),
       )
       .limit(1);
-    if (reg)
+    let pairingNote = "";
+    if (reg) {
       await db
         .update(s.registrations)
         .set(regValues)
         .where(eq(s.registrations.id, reg.id));
-    else
+      // Someone who leaves the event, or stops instructing at it, cannot stay paired.
+      const left = regValues.status === "cancelled" && reg.status !== "cancelled";
+      const ended = await endPairings(v.event.id, id, {
+        asInstructor: left || (reg.isInstructor && !instructor),
+        asStudent: left || (!reg.isInstructor && instructor),
+      });
+      pairingNote = pairingsEnded(ended);
+    } else
       await db
         .insert(s.registrations)
         .values({
@@ -187,7 +210,9 @@ export async function savePerson(
 
     refresh();
     return ok(
-      userId ? "Saved" : `${firstName} ${lastName} added to the roster`,
+      userId
+        ? `Saved${pairingNote}`
+        : `${firstName} ${lastName} added to the roster`,
     );
   } catch (err) {
     return asFailure(err);
@@ -198,7 +223,7 @@ export async function removeFromEvent(regId: string): Promise<ActionResult> {
   try {
     const v = await requireEvent("admin");
     const db = await getDb();
-    await db
+    const [reg] = await db
       .update(s.registrations)
       .set({ status: "cancelled" })
       .where(
@@ -206,9 +231,16 @@ export async function removeFromEvent(regId: string): Promise<ActionResult> {
           eq(s.registrations.id, regId),
           eq(s.registrations.eventId, v.event.id),
         ),
-      );
+      )
+      .returning({ userId: s.registrations.userId });
+    if (!reg) return fail("That registration could not be found.");
+    // Their students need a new instructor, and their instructor should stop expecting them.
+    const ended = await endPairings(v.event.id, reg.userId, {
+      asInstructor: true,
+      asStudent: true,
+    });
     refresh();
-    return ok("Registration cancelled");
+    return ok(`Registration cancelled${pairingsEnded(ended)}`);
   } catch (err) {
     return asFailure(err);
   }
@@ -292,10 +324,66 @@ export async function deleteDriverNote(noteId: string): Promise<ActionResult> {
 
 /* ───────────── Import from ClubRegistration.net (or any CSV) ───────────── */
 
+/** Someone whose run group in the app differs from the one in the file. */
+export type GroupDifference = {
+  name: string;
+  fileGroup: string;
+  appGroup: string;
+  /** "roster": already on this event's roster · "member": new to this event, classified higher in the app. */
+  where: "roster" | "member";
+};
+
 export type ImportState =
   | { step: "choose"; error?: string }
-  | { step: "preview"; preview: ImportPreview; error?: string }
-  | { step: "done"; created: number; updated: number; skipped: number };
+  | {
+      step: "preview";
+      preview: ImportPreview;
+      differences: GroupDifference[];
+      error?: string;
+    }
+  | {
+      step: "done";
+      created: number;
+      updated: number;
+      skipped: number;
+      /** People whose run group in the app was kept over the file's. */
+      kept: number;
+    };
+
+/**
+ * The run group a person imports into. Promotions and group changes are made
+ * in the app, so the app wins over the registration export:
+ *  - already on this event's roster: keep the group they have here;
+ *  - new to this event but classified higher in the app (promoted "from the
+ *    next event"): use that classification.
+ * `preferFile` lets the administrator take the file's group instead.
+ */
+function importGroup(
+  groups: RunGroup[],
+  fileGroupId: string,
+  current: { regGroupId?: string | null; memberGroupId?: string | null },
+  preferFile: boolean,
+): { groupId: string; where: "roster" | "member" | null } {
+  if (current.regGroupId)
+    return current.regGroupId === fileGroupId
+      ? { groupId: fileGroupId, where: null }
+      : {
+          groupId: preferFile ? fileGroupId : current.regGroupId,
+          where: "roster",
+        };
+  const rank = (id: string | null | undefined) => {
+    const g = groups.find((x) => x.id === id);
+    return g && !g.isInstructorGroup ? g.sortOrder : null;
+  };
+  const inFile = rank(fileGroupId);
+  const inApp = rank(current.memberGroupId);
+  if (inFile !== null && inApp !== null && inApp > inFile)
+    return {
+      groupId: preferFile ? fileGroupId : current.memberGroupId!,
+      where: "member",
+    };
+  return { groupId: fileGroupId, where: null };
+}
 
 export async function importRoster(
   _prev: ImportState,
@@ -319,12 +407,64 @@ export async function importRoster(
         step: "choose",
         error: preview.problems[0] ?? "No registrants were found in that file.",
       };
-    if (str(fd, "intent") !== "commit") return { step: "preview", preview };
-
     const db = await getDb();
+    const preferFile = bool(fd, "fileGroups");
+    if (str(fd, "intent") !== "commit") {
+      // Show where the file disagrees with run groups set in the app, before anything is written.
+      const emails = [
+        ...new Set(
+          preview.rows
+            .filter((r) => r.email && r.groupId && r.status !== "cancelled")
+            .map((r) => r.email),
+        ),
+      ];
+      const known = emails.length
+        ? await db
+            .select({
+              email: s.users.email,
+              regGroupId: s.registrations.runGroupId,
+              memberGroupId: s.memberships.runGroupId,
+            })
+            .from(s.users)
+            .leftJoin(
+              s.registrations,
+              and(
+                eq(s.registrations.userId, s.users.id),
+                eq(s.registrations.eventId, v.event.id),
+              ),
+            )
+            .leftJoin(
+              s.memberships,
+              and(
+                eq(s.memberships.userId, s.users.id),
+                eq(s.memberships.orgId, v.org.id),
+              ),
+            )
+            .where(inArray(s.users.email, emails))
+        : [];
+      const byEmail = new Map(known.map((k) => [k.email, k]));
+      const groupName = (id: string) =>
+        v.groups.find((g) => g.id === id)?.name ?? "";
+      const differences: GroupDifference[] = [];
+      for (const row of preview.rows) {
+        const current = byEmail.get(row.email);
+        if (!current || !row.groupId || row.status === "cancelled") continue;
+        const pick = importGroup(v.groups, row.groupId, current, false);
+        if (pick.where)
+          differences.push({
+            name: `${row.firstName} ${row.lastName}`.trim(),
+            fileGroup: row.groupLabel || groupName(row.groupId),
+            appGroup: groupName(pick.groupId),
+            where: pick.where,
+          });
+      }
+      return { step: "preview", preview, differences };
+    }
+
     let created = 0;
     let updated = 0;
     let skipped = 0;
+    let kept = 0;
     for (const row of preview.rows) {
       if (!row.email || !row.groupId || row.status === "cancelled") {
         skipped += 1;
@@ -387,7 +527,7 @@ export async function importRoster(
             userId,
             runGroupId: row.groupId,
             isInstructor: row.isInstructor,
-            soloApproved: row.isInstructor,
+            soloApproved: row.isInstructor || row.solo,
           });
 
       let [vehicle] = await db
@@ -420,8 +560,16 @@ export async function importRoster(
           ),
         )
         .limit(1);
+      // A re-import must not undo a promotion or a group change made in the app.
+      const group = importGroup(
+        v.groups,
+        row.groupId,
+        { regGroupId: reg?.runGroupId, memberGroupId: member?.runGroupId },
+        preferFile,
+      );
+      if (group.where && !preferFile) kept += 1;
       const values = {
-        runGroupId: row.groupId,
+        runGroupId: group.groupId,
         vehicleId: vehicle?.id ?? null,
         carNumber: row.carNumber ?? vehicle?.carNumber ?? null,
         isInstructor: row.isInstructor || Boolean(member?.isInstructor),
@@ -442,14 +590,14 @@ export async function importRoster(
           .values({
             eventId: v.event.id,
             userId,
-            solo: Boolean(member?.soloApproved) || row.isInstructor,
+            solo: Boolean(member?.soloApproved) || row.isInstructor || row.solo,
             ...values,
           });
         created += 1;
       }
     }
     refresh();
-    return { step: "done", created, updated, skipped };
+    return { step: "done", created, updated, skipped, kept };
   } catch (err) {
     console.error(err);
     return {

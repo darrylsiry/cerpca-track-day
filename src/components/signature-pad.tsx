@@ -21,10 +21,12 @@ export function SignaturePad({
   onChange?: (dataUrl: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
   const [empty, setEmpty] = useState(true);
+  // Held in state and rendered into the hidden input. Writing to the input
+  // directly is lost on the next render: React puts the default value back.
+  const [dataUrl, setDataUrl] = useState("");
 
   // Size the bitmap to the box once, at device resolution, so strokes stay crisp.
   useEffect(() => {
@@ -50,9 +52,9 @@ export function SignaturePad({
 
   const commit = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !inputRef.current) return;
+    if (!canvas) return;
     const url = canvas.toDataURL("image/png");
-    inputRef.current.value = url;
+    setDataUrl(url);
     onChange?.(url);
   }, [onChange]);
 
@@ -64,7 +66,7 @@ export function SignaturePad({
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
-    if (inputRef.current) inputRef.current.value = "";
+    setDataUrl("");
     setEmpty(true);
     onChange?.("");
   };
@@ -125,7 +127,7 @@ export function SignaturePad({
           <Eraser className="size-3.5" /> Clear
         </button>
       </div>
-      <input ref={inputRef} type="hidden" name={name} defaultValue="" />
+      <input type="hidden" name={name} value={dataUrl} readOnly />
     </div>
   );
 }

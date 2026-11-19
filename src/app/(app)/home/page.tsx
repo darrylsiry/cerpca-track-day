@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, ne } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { Check, ChevronRight, CircleDashed, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -31,8 +31,12 @@ import {
 import { screen } from "@/components/shell/skeleton";
 import { NowPanel } from "./now-panel";
 import { AskForInstructorSheet, WithdrawRideAlongButton } from "./ride-along";
+import { UrgentAlerts } from "./urgent-alerts";
 
 export const metadata: Metadata = { title: "Now" };
+
+/** How many unread urgent alerts are shown in full at the top of the screen; the rest are a tap away. */
+const URGENT_SHOWN = 2;
 
 export default screen(async function HomePage() {
   const v = await getViewer();
@@ -53,10 +57,26 @@ export default screen(async function HomePage() {
   }
   const db = await getDb();
   const event = v.event;
-  const [items, assignments, checklist, inbox] = await Promise.all([
+  const [items, assignments, checklist, urgent, inbox] = await Promise.all([
     getSchedule(event.id),
     getAssignments(event.id, v.user.id),
     getChecklist(v),
+    // Unread urgent alerts for this event go first on the screen. Session reminders are
+    // left out: the "Head to the grid" call below already carries them.
+    db
+      .select()
+      .from(s.notifications)
+      .where(
+        and(
+          eq(s.notifications.userId, v.user.id),
+          eq(s.notifications.eventId, event.id),
+          eq(s.notifications.urgent, true),
+          isNull(s.notifications.readAt),
+          ne(s.notifications.kind, "reminder"),
+        ),
+      )
+      .orderBy(desc(s.notifications.createdAt))
+      .limit(URGENT_SHOWN + 20),
     db
       .select()
       .from(s.notifications)
@@ -117,8 +137,7 @@ export default screen(async function HomePage() {
   const waiversDone = checklist
     ? checklist.waiversSigned >= checklist.waiversTotal
     : true;
-  const cleared =
-    waiversDone && tech?.status === "approved" && Boolean(tech.stickerIssuedAt);
+  const cleared = Boolean(checklist?.cleared);
 
   // What this driver still has to do themselves, surfaced at the very top on a phone.
   const todo: { text: string; href: string }[] = [];
@@ -150,6 +169,16 @@ export default screen(async function HomePage() {
             <ChevronRight className="size-4 shrink-0" />
           </Link>
         ) : null}
+        <UrgentAlerts
+          alerts={urgent.slice(0, URGENT_SHOWN).map((n) => ({
+            id: n.id,
+            title: n.title,
+            body: n.body,
+            href: n.href,
+            ago: relativeTime(n.createdAt, v.nowMs),
+          }))}
+          more={Math.max(0, urgent.length - URGENT_SHOWN)}
+        />
         <ClockProvider {...clockProps(v)}>
           <NowPanel
             items={items}

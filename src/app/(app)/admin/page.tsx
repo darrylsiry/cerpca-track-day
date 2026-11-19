@@ -20,11 +20,13 @@ import {
   type Tone,
 } from "@/components/ui";
 import { getDb, schema as s } from "@/db";
+import { clearedToDrive } from "@/lib/clearance";
 import { cn, plural } from "@/lib/cn";
 import { dateRange, daysBetween, monthDay } from "@/lib/time";
 import { instructorNeed } from "@/lib/instruction";
 import { getRosterView } from "@/server/admin";
 import { requireAdmin } from "@/server/auth";
+import { livePairings } from "@/server/pairings";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -61,10 +63,7 @@ export default screen(async function AdminOverviewPage() {
           and(eq(s.incidents.orgId, v.org.id), ne(s.incidents.status, "sent")),
         )
         .orderBy(asc(s.incidents.dueOn)),
-      db
-        .select({ studentId: s.instructorAssignments.studentId })
-        .from(s.instructorAssignments)
-        .where(eq(s.instructorAssignments.eventId, v.event.id)),
+      livePairings(v.event.id),
     ]);
 
   const total = rows.length;
@@ -81,8 +80,13 @@ export default screen(async function AdminOverviewPage() {
     ["none", "draft", "with_shop", "shop_signed"].includes(r.techStatus),
   ).length;
   const stickers = rows.filter((r) => r.sticker).length;
-  const cleared = rows.filter(
-    (r) => r.sticker && r.waiversSigned >= waiversTotal,
+  const cleared = rows.filter((r) =>
+    clearedToDrive({
+      waiversSigned: r.waiversSigned,
+      waiversTotal,
+      techStatus: r.techStatus,
+      sticker: Boolean(r.sticker),
+    }),
   ).length;
   const policy = new Map(v.groups.map((g) => [g.id, g.instructorPolicy]));
   const paired = new Set(assignments.map((a) => a.studentId));

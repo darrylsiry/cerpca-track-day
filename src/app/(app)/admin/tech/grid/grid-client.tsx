@@ -2,7 +2,8 @@
 
 import { Check, LoaderCircle, Search } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useSubmit } from "@/components/form";
 import { toast } from "@/components/toast";
 import {
   buttonClass,
@@ -12,6 +13,7 @@ import {
   Notice,
   Pill,
 } from "@/components/ui";
+import { waiverCount } from "@/lib/clearance";
 import { cn } from "@/lib/cn";
 import { GRID_TECH_ITEMS } from "@/lib/tech-form";
 import type { ActionResult, GroupLite } from "@/lib/types";
@@ -24,6 +26,8 @@ export type GridCar = {
   group: Pick<GroupLite, "name" | "color" | "textColor">;
   approved: boolean;
   sticker: string | null;
+  /** Required waivers this driver still has to sign. */
+  waiversLeft: number;
 };
 
 /** Find a car by number or driver name. Filters as you type; no round trip. */
@@ -97,7 +101,9 @@ export function GridList({
                     {c.car}
                   </span>
                 </span>
-                {c.sticker ? (
+                {c.sticker && c.waiversLeft ? (
+                  <Pill tone="warn">{c.sticker} · waivers</Pill>
+                ) : c.sticker ? (
                   <Pill tone="good">
                     <Check className="size-3.5" strokeWidth={3} /> {c.sticker}
                   </Pill>
@@ -126,22 +132,22 @@ export function GridForm({
   initial,
   initialNotes,
   approved,
+  waiversLeft,
 }: {
   action: (prev: ActionResult | null, fd: FormData) => Promise<ActionResult>;
   initial: Record<string, boolean>;
   initialNotes: string;
   approved: boolean;
+  /** Required waivers the driver still has to sign. The sticker can be issued, but they are not cleared. */
+  waiversLeft: number;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
   const [items, setItems] = useState<Record<string, boolean>>(initial);
   const [notes, setNotes] = useState(initialNotes);
-  const handled = useRef<ActionResult | null>(null);
-
-  useEffect(() => {
-    if (!state || handled.current === state) return;
-    handled.current = state;
-    if (state.ok) toast(state.message ?? "Saved");
-  }, [state]);
+  // Issuing the sticker swaps this form for the sticker panel, so the confirmation
+  // is shown as the action returns rather than from an effect on a form that has gone.
+  const [state, submit, pending] = useSubmit<ActionResult | null>(action, null, (result) => {
+    if (result?.ok) toast(result.message ?? "Saved");
+  });
 
   const open = GRID_TECH_ITEMS.filter((g) => !items[g.key]);
   const canIssue = approved && open.length === 0;
@@ -152,7 +158,7 @@ export function GridForm({
       : "";
 
   return (
-    <form action={formAction}>
+    <form onSubmit={submit}>
       <ul className="divide-y divide-line overflow-hidden rounded-[14px] border border-line bg-surface">
         {GRID_TECH_ITEMS.map((g, i) => (
           <li key={g.key}>
@@ -235,6 +241,12 @@ export function GridForm({
       {reason ? (
         <p className="mt-2 text-[15px] font-semibold text-warn">
           {reason} The sticker can be issued once that is done.
+        </p>
+      ) : waiversLeft ? (
+        <p className="mt-2 text-[15px] font-semibold text-warn">
+          {waiverCount(waiversLeft)} still to sign. You can issue the sticker,
+          but this driver is not cleared to drive until registration has the
+          signature.
         </p>
       ) : null}
     </form>

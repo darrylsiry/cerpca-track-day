@@ -13,10 +13,12 @@ import {
   PageHeader,
   Pill,
 } from "@/components/ui";
+import { waiverCount } from "@/lib/clearance";
 import { cn, fullName, vehicleLabel } from "@/lib/cn";
 import { GRID_TECH_ITEMS, TECH_STATUS } from "@/lib/tech-form";
 import { dateTime } from "@/lib/time";
 import { requireAdmin } from "@/server/auth";
+import { waiverCounts } from "@/server/clearance";
 import { getRoster } from "@/server/queries";
 import { carLabel, listInspections } from "@/server/tech";
 import { acceptPaperAtTrack, revokeSticker, saveGridTech } from "../actions";
@@ -50,11 +52,15 @@ export default screen(async function GridTechPage({
   }
   const event = v.event;
   const { u } = await searchParams;
-  const [roster, inspections] = await Promise.all([
+  const [roster, inspections, waivers] = await Promise.all([
     getRoster(event.id),
     listInspections(event.id),
+    waiverCounts(v.org.id, event.id),
   ]);
   const byUser = new Map(inspections.map((i) => [i.userId, i]));
+  // A sticker alone does not clear a driver: required waivers have to be signed at their current version too.
+  const waiversLeftOf = (userId: string) =>
+    waivers.total - (waivers.signedBy.get(userId) ?? 0);
 
   const cars: GridCar[] = roster
     .map((r) => {
@@ -73,6 +79,7 @@ export default screen(async function GridTechPage({
         sticker: insp?.stickerIssuedAt
           ? (insp.stickerNumber ?? "Issued")
           : null,
+        waiversLeft: waiversLeftOf(r.user.id),
       };
     })
     .sort(
@@ -83,6 +90,7 @@ export default screen(async function GridTechPage({
 
   const person = u ? (roster.find((r) => r.user.id === u) ?? null) : null;
   const insp = person ? (byUser.get(person.user.id) ?? null) : null;
+  const waiversLeft = person ? waiversLeftOf(person.user.id) : 0;
   const issued = cars.filter((c) => c.sticker).length;
   const ready = cars.filter((c) => c.approved && !c.sticker).length;
   const status = TECH_STATUS[insp?.status ?? "none"];
@@ -143,18 +151,61 @@ export default screen(async function GridTechPage({
                   </div>
                   <GroupChip group={person.group} size="lg" />
                 </div>
+                <div
+                  className={cn(
+                    "mt-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[10px] px-3 py-2 text-[15px]",
+                    waiversLeft ? "bg-warn-soft" : "bg-good-soft",
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "flex items-center gap-1.5 font-semibold",
+                      waiversLeft ? "text-warn" : "text-good",
+                    )}
+                  >
+                    {waiversLeft ? null : (
+                      <Check className="size-4" strokeWidth={3} aria-hidden />
+                    )}
+                    Waivers: {waivers.total - waiversLeft} of {waivers.total}{" "}
+                    signed
+                  </p>
+                  {waiversLeft ? (
+                    <Link
+                      href={`/admin/waivers/person/${person.user.id}`}
+                      className="font-semibold underline underline-offset-4"
+                    >
+                      Open their waivers
+                    </Link>
+                  ) : null}
+                </div>
               </Card>
 
               {insp?.stickerIssuedAt ? (
                 <>
-                  <div className="rounded-[14px] bg-good px-5 py-5 text-white">
-                    <p className="eyebrow text-white/80">
-                      Cleared to go on track
+                  <div
+                    className={cn(
+                      "rounded-[14px] px-5 py-5",
+                      waiversLeft
+                        ? "bg-flag-yellow text-ink"
+                        : "bg-good text-white",
+                    )}
+                  >
+                    <p className="eyebrow opacity-80">
+                      {waiversLeft
+                        ? "Sticker issued · not cleared to drive"
+                        : "Cleared to go on track"}
                     </p>
                     <p className="board mt-2 text-[3.2rem]">
                       {insp.stickerNumber}
                     </p>
-                    <p className="mt-2 text-[15px] text-white/90">
+                    {waiversLeft ? (
+                      <p className="mt-2 text-base font-bold">
+                        {waiverCount(waiversLeft)} still to sign. Send{" "}
+                        {person.user.firstName} to registration before they
+                        drive.
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-[15px] opacity-90">
                       Sticker issued {dateTime(insp.stickerIssuedAt, v.tz)}
                       {gridBy ? ` by ${fullName(gridBy)}` : ""}.
                     </p>
@@ -244,6 +295,7 @@ export default screen(async function GridTechPage({
                     initial={insp?.gridTech?.items ?? {}}
                     initialNotes={insp?.gridTech?.notes ?? ""}
                     approved={insp?.status === "approved"}
+                    waiversLeft={waiversLeft}
                   />
                 </>
               )}

@@ -1,7 +1,8 @@
 "use client";
 
 import { ArrowDown, LoaderCircle } from "lucide-react";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSubmit } from "@/components/form";
 import { SignaturePad } from "@/components/signature-pad";
 import { buttonClass, Field, Notice } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -46,7 +47,7 @@ export function ShopForm({
   eventStart: string;
   windowText: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
+  const [state, submit, pending] = useSubmit<ShopSubmitState>(action, null);
 
   // Everything is held in state, not only in the form, so nothing typed is lost if a submit is rejected.
   const [items, setItems] = useState<Record<string, TechItemResult | undefined>>(initial.items);
@@ -92,7 +93,15 @@ export function ShopForm({
   };
 
   return (
-    <form action={formAction} onSubmit={check} noValidate className="space-y-4">
+    <form
+      // Submitted by hand: a form action would reset the certification box when the server refuses the form.
+      onSubmit={(e) => {
+        check(e);
+        if (!e.defaultPrevented) submit(e);
+      }}
+      noValidate
+      className="space-y-4"
+    >
       {TECH_SECTIONS.map((section) => (
         <section key={section.key} className="rounded-[14px] border border-line bg-surface">
           <h2 className="eyebrow px-4 pt-4 text-ink-2 sm:px-5">{section.title}</h2>

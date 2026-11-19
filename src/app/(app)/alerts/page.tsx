@@ -7,7 +7,7 @@ import { screen } from "@/components/shell/skeleton";
 import { Card, EmptyState, PageHeader, Segmented } from "@/components/ui";
 import { getDb, schema as s } from "@/db";
 import { cn, plural } from "@/lib/cn";
-import { relativeTime } from "@/lib/time";
+import { leadTimes, relativeTime } from "@/lib/time";
 import { getViewer } from "@/server/auth";
 import { markAllRead } from "./actions";
 import { AlertList, type AlertRow } from "./alert-list";
@@ -44,8 +44,7 @@ export default screen(async function AlertsPage({ searchParams }: { searchParams
   const pushFirst = (devices?.n ?? 0) === 0;
 
   // "15, 10 and 5 minutes", from the region's own reminder settings.
-  const offsets = [...(v.org.settings.reminderOffsets ?? [])].sort((a, b) => b - a);
-  const leadTimes = offsets.length ? `${offsets.length > 1 ? `${offsets.slice(0, -1).join(", ")} and ` : ""}${offsets[offsets.length - 1]} minutes` : "shortly";
+  const lead = leadTimes(v.org.settings.reminderOffsets) ?? "shortly";
 
   const list: AlertRow[] = rows.map((n) => ({
     id: n.id,
@@ -85,7 +84,7 @@ export default screen(async function AlertsPage({ searchParams }: { searchParams
           ) : (
             <EmptyState title={tab === "all" ? "No alerts yet" : `No ${TABS[tab].label.toLowerCase()} yet`}>
               {tab === "reminders"
-                ? `Reminders arrive ${leadTimes} before your run group goes on track and before your classroom sessions.`
+                ? `Reminders arrive ${lead} before your run group goes on track and before your classroom sessions.`
                 : "When the organizers post an announcement for you or your run group, it will show up here."}
             </EmptyState>
           )}

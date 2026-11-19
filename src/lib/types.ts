@@ -149,6 +149,8 @@ export type GroupLite = {
   sortOrder: number;
   /** The group has an instructed and a solo half (CERPCA's Blue), and a session can be for one of them. */
   split: boolean;
+  /** "required", "optional" or "none": see @/lib/instruction. */
+  instructorPolicy: string;
 };
 
 export type ScheduleEntry = {
@@ -164,6 +166,9 @@ export type ScheduleEntry = {
   groupParts: Record<string, GroupPart>;
   note: string | null;
   cancelled: boolean;
+  /** Where the item was before it was moved; null when it is where it started. */
+  movedFromDay: string | null;
+  movedFromMin: number | null;
 };
 
 export type ActionResult<T = undefined> = { ok: true; message?: string; data?: T } | { ok: false; error: string };

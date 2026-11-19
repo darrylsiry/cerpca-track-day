@@ -17,6 +17,7 @@ import { partName } from "@/lib/schedule";
 import { dateTime, relativeTime } from "@/lib/time";
 import { getRosterView, usersByIds } from "@/server/admin";
 import { requireAdmin } from "@/server/auth";
+import { livePairings } from "@/server/pairings";
 import { channelStatus } from "@/server/notify";
 import { groupLite } from "@/server/queries";
 import { Composer } from "./composer";
@@ -165,10 +166,7 @@ export default screen(async function AnnouncementsPage({
       )
       .orderBy(desc(s.announcements.createdAt))
       .limit(60),
-    db
-      .select({ id: s.instructorAssignments.studentId })
-      .from(s.instructorAssignments)
-      .where(eq(s.instructorAssignments.eventId, v.event.id)),
+    livePairings(v.event.id).then((p) => p.map((a) => ({ id: a.studentId }))),
     db
       .select({ id: s.memberships.userId })
       .from(s.memberships)

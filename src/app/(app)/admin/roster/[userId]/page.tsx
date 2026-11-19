@@ -20,6 +20,8 @@ import {
 } from "@/components/ui";
 import { getDb, schema as s } from "@/db";
 import { fullName, vehicleLabel } from "@/lib/cn";
+import { currentSignedCount } from "@/lib/clearance";
+import { drivesSolo } from "@/lib/instruction";
 import { TECH_STATUS } from "@/lib/tech-form";
 import { dateOnly, dateRange, dateTime, weekday } from "@/lib/time";
 import { usersByIds } from "@/server/admin";
@@ -173,9 +175,7 @@ export default screen(async function DriverPage({
   );
   const name = fullName(user);
   const techState = TECH_STATUS[tech?.status ?? "none"];
-  const signed = sigs.filter((x) =>
-    templates.some((t) => t.id === x.templateId),
-  ).length;
+  const signed = currentSignedCount(templates, sigs);
   const dayLabels = v.event ? eventDays(v.event).map(weekday) : [];
   const active = reg && reg.status !== "cancelled";
 
@@ -486,10 +486,10 @@ export default screen(async function DriverPage({
                         "Run group",
                         <span key="g">
                           {group?.name}
-                          {reg.solo && !reg.isInstructor
-                            ? " · solo"
-                            : reg.isInstructor
-                              ? " · instructing"
+                          {reg.isInstructor
+                            ? " · instructing"
+                            : drivesSolo(group?.instructorPolicy, reg)
+                              ? " · solo"
                               : " · instructed"}
                         </span>,
                       ],
@@ -511,7 +511,7 @@ export default screen(async function DriverPage({
                         "Waivers",
                         <Link
                           key="w"
-                          href="/admin/waivers"
+                          href={`/admin/waivers/person/${userId}`}
                           className="underline underline-offset-4"
                         >
                           {signed} of {templates.length} signed

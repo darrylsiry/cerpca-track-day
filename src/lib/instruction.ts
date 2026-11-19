@@ -20,6 +20,22 @@ export function instructorNeed(
   return null;
 }
 
+/**
+ * Whether a driver goes out without an instructor as a matter of course. The
+ * run group decides first and the solo sign-off second: Green is always
+ * instructed, Blue is instructed until signed off, White and Black are solo.
+ *
+ * Use this wherever a screen says "Solo" or "Instructed". The stored `solo`
+ * flag alone is only the sign-off: a driver moved up to White is solo without
+ * it, and a driver moved down to Green is instructed in spite of it.
+ */
+export function drivesSolo(policy: string | null | undefined, driver: { solo: boolean; isInstructor?: boolean }): boolean {
+  return instructorNeed(policy, { solo: driver.solo, isInstructor: driver.isInstructor }) === null;
+}
+
+/** A solo sign-off means something only in a group that is instructed until signed off. */
+export const canSignOffSolo = (policy: string | null | undefined, driver: { solo: boolean }) => policy === "optional" && !driver.solo;
+
 /** A solo driver who is not instructing can ask for an instructor to ride along. */
 export function canAskForInstructor(
   group: { instructorPolicy: string; isInstructorGroup: boolean } | null | undefined,

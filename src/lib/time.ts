@@ -144,6 +144,14 @@ export function countdown(totalSeconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** "15, 10 and 5 minutes", longest first, from a region's reminder settings. Null when there are none. */
+export function leadTimes(offsets: number[] | null | undefined): string | null {
+  const list = [...new Set(offsets ?? [])].sort((a, b) => b - a);
+  if (!list.length) return null;
+  const last = list[list.length - 1];
+  return `${list.length > 1 ? `${list.slice(0, -1).join(", ")} and ` : ""}${last} minute${list.length === 1 && last === 1 ? "" : "s"}`;
+}
+
 export function duration(mins: number): string {
   if (mins < 60) return `${mins} min`;
   const h = Math.floor(mins / 60);

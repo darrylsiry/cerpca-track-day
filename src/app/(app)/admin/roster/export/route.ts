@@ -1,3 +1,4 @@
+import { drivesSolo } from "@/lib/instruction";
 import { NextResponse } from "next/server";
 import { getRosterView } from "@/server/admin";
 import { getViewer } from "@/server/auth";
@@ -56,7 +57,7 @@ export async function GET() {
       user.lastName,
       user.firstName,
       group.name,
-      reg.solo ? "Yes" : "No",
+      drivesSolo(group.instructorPolicy, reg) ? "Yes" : "No",
       reg.isInstructor ? "Yes" : "No",
       user.email,
       user.phone,

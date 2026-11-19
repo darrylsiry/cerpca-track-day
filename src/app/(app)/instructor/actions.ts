@@ -159,6 +159,14 @@ export async function recommendPromotion(
       toGroupId = next.id;
     } else if (reg.solo) {
       return fail("This driver is already signed off to drive solo.");
+    } else if (current.instructorPolicy === "required") {
+      return fail(
+        `${current.name} drivers always ride with an instructor. Recommend a move to the next run group instead.`,
+      );
+    } else if (current.instructorPolicy !== "optional") {
+      return fail(
+        `${current.name} drivers already drive solo, so there is no sign-off to recommend.`,
+      );
     }
 
     const [open] = await db

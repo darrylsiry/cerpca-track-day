@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import { getDb, schema as s } from "@/db";
 import { fullName, vehicleLabel } from "@/lib/cn";
+import { canSignOffSolo, drivesSolo } from "@/lib/instruction";
 import { dateOnly, dateTime } from "@/lib/time";
 import { usersByIds } from "@/server/admin";
 import { requireInstructor } from "@/server/auth";
@@ -79,6 +80,7 @@ export default screen(async function StudentPage({
 
   const name = fullName(st.user);
   const group = v.groups.find((g) => g.id === st.groupId);
+  const solo = drivesSolo(group?.instructorPolicy, st);
   const up = nextGroup(v.groups, group);
   const { options, defaultId } = sessionOptions(schedule, st, v.now);
   const authors = await usersByIds(
@@ -103,10 +105,10 @@ export default screen(async function StudentPage({
           <span className="flex flex-wrap items-center gap-2">
             <GroupChip group={group} /> <CarNumber n={st.carNumber} size="sm" />{" "}
             <span>{vehicleLabel(st.vehicle)}</span>
-            <Pill tone={st.solo ? "good" : "neutral"}>
-              {st.solo ? "Solo" : "Instructed"}
+            <Pill tone={solo ? "good" : "neutral"}>
+              {solo ? "Solo" : "Instructed"}
             </Pill>
-            {st.solo && st.instructorRequest ? (
+            {solo && st.instructorRequest ? (
               <Pill tone="info">
                 {st.instructorRequest === "ride_along"
                   ? "Ride-along"
@@ -128,7 +130,7 @@ export default screen(async function StudentPage({
               studentName={name}
               groupName={group?.name ?? "their group"}
               nextGroupName={up?.name ?? null}
-              canSolo={!st.solo && group?.instructorPolicy !== "required"}
+              canSolo={canSignOffSolo(group?.instructorPolicy, st)}
               pending={pending}
             />
             <PrivateNoteSheet studentId={studentId} studentName={name} />
@@ -136,7 +138,7 @@ export default screen(async function StudentPage({
         }
       />
 
-      {st.solo && st.instructorRequest ? (
+      {solo && st.instructorRequest ? (
         <Notice
           tone="info"
           className="mb-6"

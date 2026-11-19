@@ -3,6 +3,8 @@ import { getDb, schema as s } from "@/db";
 import { fullName, vehicleLabel } from "@/lib/cn";
 import { inItem } from "@/lib/schedule";
 import type { AnnouncementAudience } from "@/lib/types";
+import { waiverCounts } from "./clearance";
+import { livePairings } from "./pairings";
 import { getRoster } from "./queries";
 
 /* Read models and helpers shared by the administrator screens. */
@@ -29,6 +31,7 @@ export type RosterEntry = {
   status: string;
   checkedIn: boolean;
   tshirt: string | null;
+  /** Required waivers signed at their current version. */
   waiversSigned: number;
   techStatus: string;
   sticker: string | null;
@@ -41,54 +44,27 @@ export async function getRosterView(
   orgId: string,
 ): Promise<{ rows: RosterEntry[]; waiversTotal: number }> {
   const db = await getDb();
-  const [roster, templates, sigs, tech, assignments, members] =
-    await Promise.all([
-      getRoster(eventId),
-      db
-        .select({ id: s.waiverTemplates.id })
-        .from(s.waiverTemplates)
-        .where(
-          and(
-            eq(s.waiverTemplates.orgId, orgId),
-            eq(s.waiverTemplates.active, true),
-            eq(s.waiverTemplates.required, true),
-          ),
-        ),
-      db
-        .select({
-          userId: s.waiverSignatures.userId,
-          templateId: s.waiverSignatures.templateId,
-        })
-        .from(s.waiverSignatures)
-        .where(eq(s.waiverSignatures.eventId, eventId)),
-      db
-        .select({
-          userId: s.techInspections.userId,
-          status: s.techInspections.status,
-          sticker: s.techInspections.stickerNumber,
-          issued: s.techInspections.stickerIssuedAt,
-        })
-        .from(s.techInspections)
-        .where(eq(s.techInspections.eventId, eventId)),
-      db
-        .select()
-        .from(s.instructorAssignments)
-        .where(eq(s.instructorAssignments.eventId, eventId)),
-      db
-        .select({
-          userId: s.memberships.userId,
-          isAdmin: s.memberships.isAdmin,
-        })
-        .from(s.memberships)
-        .where(eq(s.memberships.orgId, orgId)),
-    ]);
-  const required = new Set(templates.map((t) => t.id));
-  const signedBy = new Map<string, Set<string>>();
-  for (const sig of sigs) {
-    if (!required.has(sig.templateId)) continue;
-    if (!signedBy.has(sig.userId)) signedBy.set(sig.userId, new Set());
-    signedBy.get(sig.userId)!.add(sig.templateId);
-  }
+  const [roster, waivers, tech, assignments, members] = await Promise.all([
+    getRoster(eventId),
+    waiverCounts(orgId, eventId),
+    db
+      .select({
+        userId: s.techInspections.userId,
+        status: s.techInspections.status,
+        sticker: s.techInspections.stickerNumber,
+        issued: s.techInspections.stickerIssuedAt,
+      })
+      .from(s.techInspections)
+      .where(eq(s.techInspections.eventId, eventId)),
+    livePairings(eventId),
+    db
+      .select({
+        userId: s.memberships.userId,
+        isAdmin: s.memberships.isAdmin,
+      })
+      .from(s.memberships)
+      .where(eq(s.memberships.orgId, orgId)),
+  ]);
   const techBy = new Map(tech.map((t) => [t.userId, t]));
   const nameBy = new Map(roster.map((r) => [r.user.id, fullName(r.user)]));
   const instructorOf = new Map(
@@ -126,14 +102,14 @@ export async function getRosterView(
       status: r.reg.status,
       checkedIn: Boolean(r.reg.checkedInAt),
       tshirt: r.reg.tshirtSize,
-      waiversSigned: signedBy.get(r.user.id)?.size ?? 0,
+      waiversSigned: waivers.signedBy.get(r.user.id) ?? 0,
       techStatus: t?.status ?? "none",
       sticker: t?.issued ? (t.sticker ?? "Issued") : null,
       instructorName: inst ? (nameBy.get(inst) ?? null) : null,
       studentCount: studentCount.get(r.user.id) ?? 0,
     };
   });
-  return { rows, waiversTotal: required.size };
+  return { rows, waiversTotal: waivers.total };
 }
 
 /** Resolve an announcement audience to the people registered for an event. */
@@ -176,13 +152,8 @@ export async function audienceUserIds(
         .map((r) => r.userId);
     case "instructors":
       return regs.filter((r) => r.isInstructor).map((r) => r.userId);
-    case "students": {
-      const a = await db
-        .select({ studentId: s.instructorAssignments.studentId })
-        .from(s.instructorAssignments)
-        .where(eq(s.instructorAssignments.eventId, eventId));
-      return a.map((x) => x.studentId);
-    }
+    case "students":
+      return (await livePairings(eventId)).map((x) => x.studentId);
     case "admins": {
       const m = await db
         .select({ userId: s.memberships.userId })

@@ -30,11 +30,11 @@ PGlite allows one process at a time. Do not run the `db:*` scripts while the dev
 ## What is in it
 
 **Everyone**
-- **Now**: who has the track, time left in the session, who is next, and your own next session with a countdown. It turns into a "head to the grid" call 15 minutes out.
+- **Now**: who has the track, time left in the session, who is next, and your own next session with a countdown. It turns into a "head to the grid" call 15 minutes out. Unread urgent alerts sit at the top until you tap "Got it"; a cancelled session is shown as cancelled, and a moved one says what time it moved from.
 - **Schedule**: both days, everyone's sessions with yours marked, live "now" marker, filters by run group and classroom.
 - **Track guide**: interactive circuit map, turn-by-turn student line (pick one turn to study), passing zones per run group, flags, track rules, facility maps, documents.
 - **Alerts**: announcements and reminders; optional push, text and email.
-- **Before you drive**: sign waivers, complete the tech inspection, see your tech sticker.
+- **Before you drive**: sign waivers, complete the tech inspection, see your tech sticker. "Cleared to drive" means the same thing on every screen: every required waiver signed at its current version, the tech form approved, and a sticker on the car (`src/lib/clearance.ts`).
 - **Instructor ride-along**: a solo driver (White, Black, Blue Solo) can ask for an instructor to ride along.
 
 **Instructors**
@@ -43,10 +43,10 @@ PGlite allows one process at a time. Do not run the `db:*` scripts while the dev
 - Recommend a promotion or solo sign-off, with a written rationale.
 
 **Administrators**
-- Roster with search, filters, check-in, add and edit, import from a ClubRegistration.net export, CSV export.
+- Roster with search, filters, check-in, add and edit, import from a ClubRegistration.net export, CSV export. Importing again keeps a run group that was changed in the app, and says so in the preview.
 - Driver file: contact, car, admin-only notes, session notes, promotion history, event history, roles.
-- Schedule editor: add, edit, cancel (alerts the people in the session), delay or advance the rest of the day, copy from another event. A slot can be for one run group, several, or one half of Blue ("Blue Solo and White", "Green and Blue Instructed").
-- Instructor pairing, with automatic suggestions and clash warnings. Solo drivers join the list when they ask for a ride-along or an administrator adds a check-in.
+- Schedule editor: add, edit, cancel (alerts the people in the session), delay or advance the rest of the day, copy from another event. Moving a session to another run group alerts the group that lost it too. A slot can be for one run group, several, or one half of Blue ("Blue Solo and White", "Green and Blue Instructed").
+- Instructor pairing, with automatic suggestions and clash warnings. Solo drivers join the list when they ask for a ride-along or an administrator adds a check-in. When an instructor leaves the event or stops instructing, their students are unpaired again and told.
 - Tech inspection: review queue with automatic flags, request changes, grid tech and sticker issue, shop registry.
 - Waivers: who has signed what, reminders, document templates.
 - Promotions: sign off or decline recommendations; every decision is kept.
@@ -59,7 +59,7 @@ PGlite allows one process at a time. Do not run the `db:*` scripts while the dev
 - **Next.js 16** (App Router, React 19, Server Components and Server Actions) with Cache Components on. Every screen behind sign-in is rendered at request time and streamed; `screen()` in `src/components/shell/skeleton.tsx` is the wrapper each page uses.
 - **Postgres** through **Drizzle ORM**. One schema (`src/db/schema.ts`), two drivers: PGlite locally, `pg` against a hosted database in production.
 - **Tailwind CSS 4**. Design tokens and the few custom utilities are in `src/app/globals.css`; shared components are in `src/components/`.
-- **Sign-in** by one-time email code. Sessions are rows in the database, referenced by an HTTP-only cookie (`src/server/auth.ts`). There are no passwords.
+- **Sign-in** by one-time email code. Sessions are rows in the database, referenced by an HTTP-only cookie (`src/server/auth.ts`). There are no passwords. A code allows five guesses, an address ten guesses an hour and five codes a quarter hour, each counted in a single statement (`src/server/rate-limit.ts`).
 - **Live updates** by polling: open apps ask `/api/live` every 20 seconds and re-render when the schedule, announcements or inbox changed.
 - **Reminders**: `src/server/reminders.ts`, run every minute by Vercel Cron (`vercel.json`) or the development timer (`src/instrumentation.ts`).
 - **Notifications**: `src/server/notify.ts` sends in-app alerts always, and email (Resend), text (Twilio) and web push when their keys are present. Without keys, sends are recorded as "simulated" in the delivery log.
@@ -115,6 +115,10 @@ The app is deployed at https://cerpca.siryous.app as the Vercel project `cerpca-
 - **Source documents**: `CERPCA content/` and the product brief are git-ignored and stay on this machine. The copies the Track guide serves live in `public/tracks/`.
 - **Schema changes**: run `npm run db:migrate` with `DATABASE_URL` set to the Neon connection string before deploying. Local development never touches the live database.
 - **Reminder job**: Neon's free plan puts the database to sleep after five idle minutes and allows 100 compute-hours a month, which a query every minute would use up. When no event is running that day, the job leaves the database alone for 30 minutes at a time (`src/app/api/cron/reminders/route.ts`).
+
+## Review agents and acceptance tests
+
+Four independent Claude agents review this app: code quality, security, UX and user acceptance. `scripts/review-run.sh all` runs them, each alone in its own sandboxed copy of the code, and their reports land in `docs/agent-reports/`. `scripts/uat.sh` runs the acceptance tests on their own: every function on a throwaway local copy, and signed-out, read-only checks on the live site. `docs/REVIEW_AGENTS.md` explains how they work and what keeps them independent and the live site safe.
 
 ## Before using it for a real event
 

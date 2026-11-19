@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import { useTrackNow } from "@/components/clock";
 import { GroupBar, ItemGroups, KIND, KindIcon } from "@/components/schedule-bits";
 import { cn } from "@/lib/cn";
-import { liveBoard, myDay, phaseOf, secondsUntil, studentsIn, type ScheduleLens } from "@/lib/schedule";
+import { liveBoard, movedFrom, myDay, phaseOf, secondsUntil, studentsIn, type ScheduleLens } from "@/lib/schedule";
 import { clock, clockRange, countdown, dayLong, daysBetween, weekday } from "@/lib/time";
 import type { GroupLite, ScheduleEntry } from "@/lib/types";
 
@@ -42,6 +42,9 @@ export function NowPanel({ items, groups, days, lens, registered, gridPlace }: P
 
   const nextForMe = mine.upcoming[0] ?? null;
   const nowForMe = mine.current;
+  // Sessions of theirs that are off and would have come before the next one: said, not silently skipped.
+  const skipped = mine.cancelledAhead.filter((x) => !nextForMe || x.item.startMin <= nextForMe.item.startMin);
+  const nextMoved = nextForMe ? movedFrom(nextForMe.item) : null;
   const secsToNext = nextForMe ? secondsUntil(nextForMe.item.startMin, now) : 0;
   const gridCall = Boolean(nextForMe && board.isToday && nextForMe.item.kind === "track" && secsToNext <= 15 * 60);
 
@@ -139,6 +142,13 @@ export function NowPanel({ items, groups, days, lens, registered, gridPlace }: P
                 </div>
               ))}
 
+              {skipped.map(({ item, why }) => (
+                <p key={item.id} className="mt-3 rounded-[12px] bg-bad-soft px-4 py-2.5 text-[15px] font-semibold text-bad" role="status">
+                  {why === "student" ? `${withStudent(item)}'s` : "Your"} <span className="timing">{clock(item.startMin)}</span> {item.title}
+                  {item.kind === "track" ? " session" : ""} is cancelled.
+                </p>
+              ))}
+
               {nextForMe ? (
                 <div className={cn("mt-3 rounded-[12px] px-4 py-3", gridCall ? "bg-flag-yellow text-ink" : "bg-paper")}>
                   <div className="flex items-end justify-between gap-3">
@@ -153,6 +163,13 @@ export function NowPanel({ items, groups, days, lens, registered, gridPlace }: P
                         {nextForMe.why === "student" ? <span>· with {withStudent(nextForMe.item)}</span> : null}
                         {nextForMe.item.location ? <span>· {nextForMe.item.location}</span> : nextForMe.item.kind === "track" ? <span>· {gridPlace}</span> : null}
                       </p>
+                      {nextMoved ? (
+                        <p className="mt-1.5">
+                          <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-[13px] font-bold", gridCall ? "bg-ink text-white" : "bg-warn-soft text-warn")}>
+                            Time changed: {nextMoved}
+                          </span>
+                        </p>
+                      ) : null}
                     </div>
                     {board.isToday ? (
                       <div className="shrink-0 text-right">
@@ -183,21 +200,25 @@ export function NowPanel({ items, groups, days, lens, registered, gridPlace }: P
           </div>
           <ol className="px-2 pt-1 pb-2 sm:px-4">
             {mine.all.map(({ item, why }) => {
-              const phase = phaseOf(item, now);
+              const off = item.cancelled;
+              const phase = off ? (now.day > item.day || (now.day === item.day && now.minutes >= item.endMin) ? "past" : "next") : phaseOf(item, now);
+              const moved = off ? null : movedFrom(item);
               return (
                 <li key={item.id} className={cn("flex items-stretch gap-3 rounded-[10px] px-2 py-2.5", phase === "now" && "bg-paper", phase === "past" && "opacity-50")}>
-                  <span className="timing w-[4.6rem] shrink-0 pt-px text-right text-[15px] font-semibold">{clock(item.startMin)}</span>
-                  <GroupBar item={item} groups={groups} />
+                  <span className={cn("timing w-[4.6rem] shrink-0 pt-px text-right text-[15px] font-semibold", off && "text-ink-3 line-through")}>{clock(item.startMin)}</span>
+                  <GroupBar item={item} groups={groups} className={off ? "opacity-40" : undefined} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-x-2 text-[15px] leading-snug font-bold">
-                      {item.title}
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-snug font-bold">
+                      <span className={off ? "text-ink-3 line-through" : undefined}>{item.title}</span>
+                      {off ? <span className="rounded-full bg-bad-soft px-2 py-0.5 text-[11px] font-bold text-bad">Cancelled</span> : null}
                       {phase === "now" ? <span className="rounded-full bg-good-soft px-2 py-0.5 text-[11px] font-bold text-good">Now</span> : null}
                     </span>
                     <span className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-ink-2">
                       <KindIcon kind={item.kind} className="size-3.5" />
                       {why === "student" ? `With ${withStudent(item)}` : (KIND[item.kind]?.label ?? "")}
                       {item.location ? ` · ${item.location}` : ""}
-                      <span className="timing">· to {clock(item.endMin)}</span>
+                      {off ? null : <span className="timing">· to {clock(item.endMin)}</span>}
+                      {moved ? <span className="font-semibold text-warn">· {moved}</span> : null}
                     </span>
                   </span>
                 </li>

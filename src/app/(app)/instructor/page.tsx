@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { getDb, schema as s } from "@/db";
 import { fullName, plural, vehicleLabel } from "@/lib/cn";
+import { canSignOffSolo, drivesSolo } from "@/lib/instruction";
 import { clock, weekday } from "@/lib/time";
 import { requireInstructor } from "@/server/auth";
 import {
@@ -98,6 +99,7 @@ export default screen(async function InstructorPage() {
             const member = members.find((m) => m.userId === st.user.id);
             const up = nextGroup(v.groups, group);
             const hasPending = pending.some((p) => p.userId === st.user.id);
+            const solo = drivesSolo(group?.instructorPolicy, st);
             return (
               <Card key={st.user.id} className="overflow-hidden">
                 <Link
@@ -160,20 +162,20 @@ export default screen(async function InstructorPage() {
                   <div>
                     <dt className="eyebrow text-[11px] text-ink-3">Status</dt>
                     <dd className="mt-0.5 flex flex-wrap gap-1">
-                      <Pill tone={st.solo ? "good" : "neutral"}>
-                        {st.solo ? "Solo" : "Instructed"}
+                      <Pill tone={solo ? "good" : "neutral"}>
+                        {solo ? "Solo" : "Instructed"}
                       </Pill>
-                      {st.solo && st.instructorRequest === "ride_along" ? (
+                      {solo && st.instructorRequest === "ride_along" ? (
                         <Pill tone="info">Ride-along</Pill>
                       ) : null}
-                      {st.solo && st.instructorRequest === "check_in" ? (
+                      {solo && st.instructorRequest === "check_in" ? (
                         <Pill tone="info">Check-in</Pill>
                       ) : null}
                       {hasPending ? <Pill tone="warn">Recommended</Pill> : null}
                     </dd>
                   </div>
                 </dl>
-                {st.solo && st.instructorRequest ? (
+                {solo && st.instructorRequest ? (
                   <p className="border-t border-line px-4 py-3 text-[15px] text-ink-2 sm:px-5">
                     {st.instructorRequest === "ride_along"
                       ? `${st.user.firstName} drives solo and asked for an instructor to ride along.`
@@ -198,7 +200,7 @@ export default screen(async function InstructorPage() {
                     studentName={name}
                     groupName={group?.name ?? "their group"}
                     nextGroupName={up?.name ?? null}
-                    canSolo={!st.solo && group?.instructorPolicy !== "required"}
+                    canSolo={canSignOffSolo(group?.instructorPolicy, st)}
                     pending={hasPending}
                     compact
                   />

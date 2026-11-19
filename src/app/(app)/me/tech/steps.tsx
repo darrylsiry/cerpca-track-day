@@ -1,14 +1,15 @@
 "use client";
 
 import { Check, Copy, ExternalLink, LoaderCircle, Mail, Send, Upload } from "lucide-react";
-import { useActionState, useState } from "react";
-import { ActionButton, ActionForm, SubmitButton } from "@/components/form";
+import { useState } from "react";
+import { ActionButton, ActionForm, SubmitButton, useSubmit } from "@/components/form";
 import { Sheet } from "@/components/sheet";
 import { SignaturePad } from "@/components/signature-pad";
 import { toast } from "@/components/toast";
 import { buttonClass, Field, Notice } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { DRIVER_CERTIFICATION } from "@/lib/tech-form";
+import type { ActionResult } from "@/lib/types";
 import { cancelShopRequest, inviteShop, saveCarDetails, signAndSubmit, uploadPaperForm, type InviteState } from "./actions";
 
 /* ───────────── Step 1: car and driver ───────────── */
@@ -214,7 +215,8 @@ function UploadFields({ current, today }: Pick<ShopStepProps, "current" | "today
 export function ShopStep({ status, method, shops, current, today, paperFormHref, redoOpen }: ShopStepProps) {
   // One action state for the whole step, so a freshly created link survives the
   // re-render that moves this step from "choose" to "waiting on the shop".
-  const [invite, inviteAction, invitePending] = useActionState<InviteState, FormData>(inviteShop, null);
+  // Submitted by hand so a refused send leaves the shop picker on what was chosen.
+  const [invite, sendInvite, invitePending] = useSubmit<InviteState>(inviteShop, null);
   const inviteError = invite && !invite.ok ? invite.error : null;
   const freshLink = invite?.ok ? invite.link : undefined;
 
@@ -225,7 +227,7 @@ export function ShopStep({ status, method, shops, current, today, paperFormHref,
           <Mail className="size-4.5" /> Send it to my shop
         </h3>
         <p className="mt-1 mb-3 text-sm text-ink-2">Your shop fills in the checklist and signs on their own phone or computer. Nothing to print, nothing to carry to the track.</p>
-        <form action={inviteAction}>
+        <form onSubmit={sendInvite}>
           <InviteFields shops={shops} current={current} pending={invitePending} />
           {inviteError ? (
             <Notice tone="bad" className="mt-3">
@@ -285,7 +287,7 @@ export function ShopStep({ status, method, shops, current, today, paperFormHref,
         {inviteError ? <Notice tone="bad">{inviteError}</Notice> : null}
 
         <div className="flex flex-wrap gap-2">
-          <form action={inviteAction}>
+          <form onSubmit={sendInvite}>
             <input type="hidden" name="shopId" value={current.shopId && shops.some((x) => x.id === current.shopId) ? current.shopId : "other"} />
             <input type="hidden" name="shopName" value={current.shopName ?? ""} />
             <input type="hidden" name="shopEmail" value={current.shopEmail ?? ""} />
@@ -331,7 +333,7 @@ export function ShopStep({ status, method, shops, current, today, paperFormHref,
 /* ───────────── Step 3: the driver's signature ───────────── */
 
 export function SignForm({ defaultName }: { defaultName: string }) {
-  const [state, action, pending] = useActionState(signAndSubmit, null);
+  const [state, submit, pending] = useSubmit<ActionResult | null>(signAndSubmit, null);
   // Held in state (not just in the form) so a rejected submit doesn't wipe what was typed and drawn.
   const [name, setName] = useState(defaultName);
   const [signature, setSignature] = useState("");
@@ -339,7 +341,7 @@ export function SignForm({ defaultName }: { defaultName: string }) {
   const ready = name.trim().length >= 3 && signature !== "" && certify;
 
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4">
       <div className="max-h-72 overflow-y-auto rounded-[10px] border border-line bg-paper px-4 py-3 text-[15px] leading-relaxed">
         <p className="font-bold">The undersigned hereby certifies that:</p>
         <ol className="mt-2 list-decimal space-y-2.5 pl-5">

@@ -18,12 +18,19 @@ export async function signInStep(prev: LoginState, formData: FormData): Promise<
 
   if (prev.step === "email" || intent === "resend") {
     if (!emailOk(email)) return { step: "email", email, error: "Enter the email address you registered with." };
-    const { devCode } = await issueSignInCode(email);
+    const { devCode, limited } = await issueSignInCode(email);
+    if (limited)
+      return {
+        step: prev.step,
+        email,
+        error: "Too many sign-in codes have been requested. Wait 15 minutes, then try again.",
+      };
     return { step: "code", email, devCode };
   }
 
   if (code.length !== 6) return { ...prev, error: "Enter the 6-digit code from the email." };
-  const user = await verifySignInCode(email, code);
+  const { user, limited } = await verifySignInCode(email, code);
+  if (limited) return { ...prev, devCode: undefined, error: "Too many attempts. Wait a while, then send a new code." };
   if (!user) return { ...prev, error: "That code is wrong or has expired. Check it, or send a new one." };
   await createSession(user.id);
   redirect("/home");

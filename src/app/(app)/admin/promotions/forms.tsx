@@ -129,7 +129,8 @@ export function PromoteSheet({
             onChange={(e) => setKind(e.target.value)}
           >
             <option value="group">Move to another run group</option>
-            <option value="solo" disabled={driver?.solo}>
+            {/* Nothing to sign off for a driver who is already solo, or whose group is solo by default. */}
+            <option value="solo" disabled={driver?.solo || current?.instructorPolicy === "none"}>
               Sign off to drive solo
             </option>
           </select>

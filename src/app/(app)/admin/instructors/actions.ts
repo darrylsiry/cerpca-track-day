@@ -9,6 +9,7 @@ import type { ActionResult } from "@/lib/types";
 import { getRosterView, usersByIds } from "@/server/admin";
 import { requireEvent } from "@/server/auth";
 import { notifyUsers } from "@/server/notify";
+import { livePairings } from "@/server/pairings";
 import { asFailure, fail, ok, str } from "@/server/util";
 
 async function tellPair(
@@ -146,10 +147,7 @@ export async function suggestPairings(): Promise<ActionResult> {
       (r) => instructorNeed(policy.get(r.groupId), r) !== null,
     );
     const instructors = rows.filter((r) => r.isInstructor);
-    const assignments = await db
-      .select()
-      .from(s.instructorAssignments)
-      .where(eq(s.instructorAssignments.eventId, v.event.id));
+    const assignments = await livePairings(v.event.id);
     const groupOf = new Map(rows.map((r) => [r.userId, r.groupId]));
     const load = new Map<string, string[]>(
       instructors.map((i) => [i.userId, []]),
@@ -183,12 +181,20 @@ export async function suggestPairings(): Promise<ActionResult> {
         stuck += 1;
         continue;
       }
+      // A leftover row from an instructor who has since left is replaced, not duplicated.
       await db
         .insert(s.instructorAssignments)
         .values({
           eventId: v.event.id,
           instructorId: pick.userId,
           studentId: student.userId,
+        })
+        .onConflictDoUpdate({
+          target: [
+            s.instructorAssignments.eventId,
+            s.instructorAssignments.studentId,
+          ],
+          set: { instructorId: pick.userId, note: null },
         });
       load.get(pick.userId)!.push(student.groupId);
       await tellPair(v.event.id, pick.userId, student.userId);
@@ -285,7 +291,11 @@ export async function clearInstructorRequest(
       await notifyUsers({
         userIds: [paired.instructorId],
         title: `${student ? fullName(student) : "A driver"} is off your student list`,
-        body: "The administrators ended the ride-along.",
+        // A check-in is something the administrators set up; a ride-along is something the driver asked for.
+        body:
+          reg.instructorRequest === "check_in"
+            ? "The administrators ended the check-in."
+            : "The administrators ended the ride-along.",
         href: "/instructor",
         kind: "assignment",
         eventId: v.event.id,
