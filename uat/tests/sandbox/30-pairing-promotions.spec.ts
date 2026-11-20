@@ -139,6 +139,11 @@ async function pair(page: Page, student: string, instructor: string | null) {
   await expect(select).toBeEnabled();
 }
 
+/** The warning for two students of one instructor who share a session, in either order of their names. */
+const TOGETHER_SUNDAY = (a: string, b: string) => new RegExp(`(${a} and ${b}|${b} and ${a}) are on track at the same time: Sun 3:10 PM, Green and Blue\\.`);
+/** Any double-booking warning on the pairing page. */
+const DOUBLE_BOOKED = /are on track at the same time|No session is free to ride with/;
+
 /** A driver's "Your instructor" card on the Now screen. */
 const instructorPanel = (page: Page) => page.getByRole("heading", { name: "Your instructor", exact: true }).locator("xpath=..");
 const GRID = /Meet at the (false )?grid ten minutes before each of your sessions\./;
@@ -227,6 +232,18 @@ test.describe("instructor pairing", () => {
     await expect(rosalind).toContainText(`${hers} students`);
     await expect(picker(page, "Holly Pruitt").locator("option", { hasText: "Rosalind Achterberg" })).toContainText("same group clash");
     await expect(picker(page, "Holly Pruitt").locator("option", { hasText: "Rafael Montoya" })).toHaveText("Rafael Montoya · free");
+
+    // A clash is judged from the schedule, not from run-group names. Rosalind's Green and Blue Instructed
+    // students are in different groups, but Sunday's last student session puts both groups on track together,
+    // so she is flagged: on her card and at the top of the page, with the session named.
+    await expect(rosalind).toContainText(TOGETHER_SUNDAY("Owen Gallagher", "Simone Baptiste"));
+    const flagged = page.getByRole("main").getByRole("listitem").filter({ hasText: "Rosalind Achterberg:" });
+    await expect(flagged).toContainText(TOGETHER_SUNDAY("Owen Gallagher", "Simone Baptiste"));
+    await expect(page.getByRole("main").getByText(/^\d+ instructors? cannot be with every student who needs them$/)).toBeVisible();
+    // Wendell's check-in needs only one session, and his White sessions are all free, so it is not a clash.
+    await expect(rosalind).not.toContainText("No session is free");
+    // The picker says so before anyone chooses: Calvin has a Green student, and Theo is Blue Instructed.
+    await expect(picker(page, "Theo Marchetti").locator("option", { hasText: "Calvin Oduya" })).toContainText("clash Sun 3:10 PM");
     await expect(instructorCard(page, "Rafael Montoya").getByText("Free", { exact: true })).toBeVisible();
   });
 
@@ -289,29 +306,32 @@ test.describe("instructor pairing", () => {
     // picker before Marian chooses, and on the instructor's card afterwards.
     const calvinCard = instructorCard(marian, "Calvin Oduya");
     await expect(calvinCard).toContainText("Claire Whitaker");
-    await expect(calvinCard).not.toContainText("Two students in the same run group");
+    await expect(calvinCard).not.toContainText("in the same run group");
     await expect(picker(marian, "Holly Pruitt").locator("option", { hasText: "Calvin Oduya" })).toContainText("same group clash");
     await pair(marian, "Holly Pruitt", "Calvin Oduya");
+    // The confirmation says what to check, so a double booking made by hand is never silent.
+    await expect(marian.locator('[aria-live="polite"]').getByText(/^Paired, and both have been told\. Check this: .+ are in the same run group, so they are on track at the same time\.$/).last()).toBeVisible();
     await expect(calvinCard).toContainText("2 students");
-    await expect(calvinCard).toContainText("Two students in the same run group are on track at the same time.");
+    await expect(calvinCard).toContainText(/(Claire Whitaker and Holly Pruitt|Holly Pruitt and Claire Whitaker) are in the same run group, so they are on track at the same time\./);
 
     // "No instructor" ends the pairing: she is back among the unpaired, and her Now screen says so.
     await pair(marian, "Holly Pruitt", null);
     await confirmed(marian, "Pairing removed");
     await expect(stat(marian, "Not paired yet")).toHaveText(String(unpaired));
     await expect(calvinCard).not.toContainText("Holly Pruitt");
-    await expect(calvinCard).not.toContainText("Two students in the same run group");
+    await expect(calvinCard).not.toContainText("in the same run group");
     await holly.goto("/home");
     await expect(instructorPanel(holly)).toContainText("Not paired yet. The Chief Driving Instructor assigns instructors before the drivers meeting, and you will get an alert when yours is set.");
   });
 
-  test("Pair the rest for me gives every waiting driver an instructor without a run-group clash", async ({ as, person }) => {
+  test("Pair the rest for me gives every waiting driver an instructor without double-booking anyone", async ({ as, person }) => {
     const marian = await as("marian");
     await marian.goto("/admin/instructors");
     const waitingNow = await count(marian, "Not paired yet");
     expect(waitingNow, "drivers waiting for an instructor (Holly at least)").toBeGreaterThan(0);
     await expect(paired(marian, "Holly Pruitt")).toHaveText("No instructor");
-    const clashesBefore = await marian.getByRole("main").getByText("Two students in the same run group are on track at the same time.").count();
+    // Every double booking on the page, whether two students share a run group or only one combined session.
+    const clashesBefore = await marian.getByRole("main").getByText(DOUBLE_BOOKED).count();
 
     const asked: string[] = [];
     marian.on("dialog", (d) => asked.push(d.message()));
@@ -324,8 +344,8 @@ test.describe("instructor pairing", () => {
     await expect(marian.getByRole("button", { name: "Pair the rest for me" })).toHaveCount(0);
     const pickers = marian.getByRole("main").getByRole("combobox", { name: /^Instructor for / });
     expect(await pickers.evaluateAll((els) => els.filter((el) => (el as HTMLSelectElement).value === "").length)).toBe(0);
-    // It did not put two students from one run group with the same instructor.
-    await expect(marian.getByRole("main").getByText("Two students in the same run group are on track at the same time.")).toHaveCount(clashesBefore);
+    // It did not give any instructor two students who are on track at the same time.
+    await expect(marian.getByRole("main").getByText(DOUBLE_BOOKED)).toHaveCount(clashesBefore);
 
     // Holly's new instructor: named in her file, told about her, and she is told about them.
     const instructor = ((await paired(marian, "Holly Pruitt").textContent()) ?? "").split(" · ")[0];

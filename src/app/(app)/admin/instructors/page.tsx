@@ -3,6 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionButton } from "@/components/form";
 import { instructorNeed, NEED_LABEL } from "@/lib/instruction";
+import {
+  clashesIfPaired,
+  clashShort,
+  clashText,
+  isDoubleBooking,
+  pairingClashes,
+} from "@/lib/pairing";
 import { screen } from "@/components/shell/skeleton";
 import {
   Card,
@@ -15,10 +22,9 @@ import {
   SectionTitle,
   Stat,
 } from "@/components/ui";
-import { plural } from "@/lib/cn";
-import { getRosterView } from "@/server/admin";
+import { cn, plural } from "@/lib/cn";
 import { requireAdmin } from "@/server/auth";
-import { livePairings } from "@/server/pairings";
+import { pairingBoard } from "@/server/pairing-board";
 import { clearInstructorRequest, suggestPairings } from "./actions";
 import { AssignSelect } from "./assign-select";
 import { CheckInSheet } from "./check-in-sheet";
@@ -34,10 +40,8 @@ export default screen(async function PairingPage() {
       </EmptyState>
     );
   // Only pairings that still stand: a student whose instructor has left the event is unpaired again.
-  const [{ rows }, assignments] = await Promise.all([
-    getRosterView(v.event.id, v.org.id),
-    livePairings(v.event.id),
-  ]);
+  const board = await pairingBoard(v.event, v.org.id, v.groups);
+  const { rows, assignments, schedule } = board;
 
   const groupById = new Map(v.groups.map((g) => [g.id, g]));
   const byId = new Map(rows.map((r) => [r.userId, r]));
@@ -104,12 +108,20 @@ export default screen(async function PairingPage() {
   ]
     .filter(Boolean)
     .join(" ");
-  const clashFor = (instructorId: string) => {
-    const groups = (studentsOf.get(instructorId) ?? []).map(
-      (id) => byId.get(id)?.groupId,
-    );
-    return groups.length !== new Set(groups).size;
-  };
+  // Judged from the schedule, so a combined session ("Green and Blue") counts and a split one does not.
+  const clashesOf = new Map(
+    instructors.map((i) => [
+      i.userId,
+      pairingClashes(
+        schedule,
+        board.person(i),
+        board.studentsOf.get(i.userId) ?? [],
+      ),
+    ]),
+  );
+  const doubleBooked = instructors.filter((i) =>
+    clashesOf.get(i.userId)!.some(isDoubleBooking),
+  );
 
   return (
     <>
@@ -147,6 +159,31 @@ export default screen(async function PairingPage() {
         <Stat label="Instructors here" value={instructors.length} />
         <Stat label="Instructors free" value={free.length} />
       </div>
+
+      {doubleBooked.length ? (
+        <Notice
+          tone="warn"
+          className="mb-6"
+          title={`${plural(doubleBooked.length, "instructor")} cannot be with every student who needs them`}
+        >
+          <ul className="space-y-1">
+            {doubleBooked.map((i) => (
+              <li key={i.userId}>
+                <strong>{i.name}:</strong>{" "}
+                {clashesOf
+                  .get(i.userId)!
+                  .filter(isDoubleBooking)
+                  .map(clashText)
+                  .join(" ")}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2">
+            Give one of the students another instructor, or leave it if you
+            have agreed how that session will be covered.
+          </p>
+        </Notice>
+      ) : null}
 
       {!instructors.length ? (
         <Notice
@@ -243,13 +280,17 @@ export default screen(async function PairingPage() {
                         const theirs = (studentsOf.get(i.userId) ?? []).filter(
                           (id) => id !== st.userId,
                         );
+                        const clash = clashesIfPaired(
+                          schedule,
+                          board.person(i),
+                          board.studentsOf.get(i.userId) ?? [],
+                          board.student(st),
+                        )[0];
                         return {
                           id: i.userId,
                           name: i.name,
                           load: theirs.length,
-                          clash: theirs.some(
-                            (id) => byId.get(id)?.groupId === st.groupId,
-                          ),
+                          clash: clash ? clashShort(clash) : null,
                         };
                       })}
                     />
@@ -272,7 +313,7 @@ export default screen(async function PairingPage() {
               const students = (studentsOf.get(i.userId) ?? [])
                 .map((id) => byId.get(id))
                 .filter((x) => x !== undefined);
-              const clash = clashFor(i.userId);
+              const clashes = clashesOf.get(i.userId)!;
               return (
                 <li key={i.userId}>
                   <Card className="px-4 py-3">
@@ -306,13 +347,18 @@ export default screen(async function PairingPage() {
                         ))}
                       </ul>
                     ) : null}
-                    {clash ? (
-                      <p className="mt-2 flex items-start gap-1.5 text-[13px] font-semibold text-bad">
+                    {clashes.map((c, n) => (
+                      <p
+                        key={n}
+                        className={cn(
+                          "mt-2 flex items-start gap-1.5 text-[13px] font-semibold",
+                          isDoubleBooking(c) ? "text-bad" : "text-ink-2",
+                        )}
+                      >
                         <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />{" "}
-                        Two students in the same run group are on track at the
-                        same time.
+                        {clashText(c)}
                       </p>
-                    ) : null}
+                    ))}
                   </Card>
                 </li>
               );

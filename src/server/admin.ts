@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb, schema as s } from "@/db";
 import { fullName, vehicleLabel } from "@/lib/cn";
 import { inItem } from "@/lib/schedule";
@@ -184,6 +184,25 @@ export async function bumpSchedule(eventId: string) {
     .update(s.events)
     .set({ scheduleVersion: sql`${s.events.scheduleVersion} + 1` })
     .where(eq(s.events.id, eventId));
+}
+
+/**
+ * The delivery log for one region: every email, text and push about one of its
+ * events, and messages tied to no event (a sign-in code) sent to one of its
+ * members. Another region's messages, and the addresses in them, are never
+ * returned. A message about an event belongs to that event's region, whoever
+ * received it.
+ */
+export async function deliveryLog(orgId: string, limit = 150) {
+  const db = await getDb();
+  const events = db.select({ id: s.events.id }).from(s.events).where(eq(s.events.orgId, orgId));
+  const members = db.select({ id: s.memberships.userId }).from(s.memberships).where(eq(s.memberships.orgId, orgId));
+  return db
+    .select()
+    .from(s.messageLog)
+    .where(or(inArray(s.messageLog.eventId, events), and(isNull(s.messageLog.eventId), inArray(s.messageLog.userId, members))))
+    .orderBy(desc(s.messageLog.createdAt))
+    .limit(limit);
 }
 
 export async function usersByIds(ids: string[]) {

@@ -1,6 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import fs from "node:fs";
 import { test as base, expect, signIn, sql, val, openBrowser, PEOPLE, T } from "./fixtures";
+import { clashesIfPaired, clashShort, clashText, isDoubleBooking, pairingClashes, type PairedStudent, type PairingPerson } from "../../../src/lib/pairing";
 
 // Things that must not slip through at an event:
 //  - a sign-in code cannot be found by guessing, however fast or however many codes are asked for;
@@ -8,6 +9,8 @@ import { test as base, expect, signIn, sql, val, openBrowser, PEOPLE, T } from "
 //  - a session moved to another run group tells the group that lost it;
 //  - an urgent alert, a cancelled session and a moved session are all visible on the Now screen;
 //  - importing the registration export again does not undo a run group set in the app.
+//  - a sign-in code is never kept where an administrator can read it, and the delivery log shows one region only;
+//  - an instructor is never quietly given two students who are on track at the same time.
 //
 // House rules for this file:
 //  - It runs last. Tessa Nakamura, Arjun Mehta and Owen Gallagher are still left alone, and so are the
@@ -493,5 +496,165 @@ test.describe("importing the registration export again", () => {
     await panel.getByRole("button", { name: "Close" }).click();
     panel = await preview("Blue");
     await expect(panel.getByText(/different run group in the app/)).toHaveCount(0);
+  });
+});
+
+// ───── sign-in codes and the delivery log
+
+test.describe("the delivery log keeps sign-in codes and other regions out", () => {
+  test("a sign-in code is in the email only: not in its subject, and not in the log administrators read", async ({ page, browser, problems }) => {
+    // Someone no earlier test has asked a code for in the last hour, so the limits start from nothing.
+    const who = drivers(`not exists (select 1 from otp_codes o where o.email = u.email and o.created_at > now() - interval '61 minutes')`, "u.last_name, u.first_name")[0];
+    expect(who, "a driver who has not asked for a code in the last hour").toBeTruthy();
+    await clearOfWindowEnd(15);
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(who.email);
+    await page.getByRole("button", { name: /Email me a code/ }).click();
+    const notice = page.getByText(/Your code is/);
+    await expect(notice).toBeVisible();
+    const code = ((await notice.textContent()) ?? "").match(/\d{6}/)?.[0] ?? "";
+    expect(code).toMatch(/^\d{6}$/);
+
+    // The email is written to the log just after the page answers.
+    const logged = () => sql(`select coalesce(subject, ''), body from message_log where kind = 'signin' and to_address = '${who.email}' order by created_at desc limit 1`)[0];
+    await expect.poll(() => logged()?.[0], { message: "the subject of the sign-in email in the log" }).toBe("Your Track Day sign-in code");
+    expect(logged()[1], "the body kept in the log").toBe("(contents withheld from the log)");
+    expect(count(`select count(*) from message_log where kind = 'signin' and (subject ~ '[0-9]{6}' or body ~ '[0-9]{6}')`), "sign-in rows in the log that hold a six-digit code").toBe(0);
+
+    // An administrator reading the delivery log sees that a code was sent to her, and not the code.
+    const ctx = await openBrowser(browser, problems);
+    const admin = await ctx.newPage();
+    await signIn(admin, "marian");
+    await go(admin, "/admin/announcements?tab=log");
+    const row = admin.getByRole("main").getByRole("listitem").filter({ hasText: `to ${who.email}` }).first();
+    await expect(row).toContainText("Your Track Day sign-in code");
+    await expect(admin.getByRole("main")).not.toContainText(code);
+    await ctx.close();
+  });
+
+  test("the delivery log lists this region's messages only", async ({ page }) => {
+    // No screen can create a second region, so this one test writes rows straight into the sandbox's
+    // database: a message to someone who is in no region here, and one tied to nobody. Both are removed afterwards.
+    const stranger = `uat-other-region-${T}@example.com`;
+    const ids = [`uat-log-a-${T}`, `uat-log-b-${T}`];
+    sql(`insert into message_log (id, user_id, event_id, channel, to_address, subject, body, status, kind)
+         values ('${ids[0]}', 'uat-nobody-${T}', null, 'email', '${stranger}', 'UAT ${T} another region', 'x', 'simulated', 'announcement'),
+                ('${ids[1]}', null, null, 'email', '${stranger}', 'UAT ${T} tied to nobody', 'x', 'simulated', 'announcement')`);
+    try {
+      await signIn(page, "marian");
+      await go(page, "/admin/announcements?tab=log");
+      // The log is there and has this region's own messages in it.
+      await expect(page.getByRole("main").getByRole("listitem").first()).toBeVisible();
+      await expect(page.getByRole("main")).not.toContainText(stranger);
+      await expect(page.getByRole("main")).not.toContainText(`UAT ${T} another region`);
+      await expect(page.getByRole("main")).not.toContainText(`UAT ${T} tied to nobody`);
+    } finally {
+      sql(`delete from message_log where id in (${ids.map((i) => `'${i}'`).join(",")})`);
+    }
+  });
+});
+
+// ───── pairing clashes are judged from the schedule
+
+// The rule itself, checked directly: it is a plain function of the schedule and who is paired with whom
+// (src/lib/pairing.ts). The pairing page and "Pair the rest for me" both use it; 30-pairing-promotions
+// checks what they show.
+test.describe("an instructor's double bookings are worked out from the schedule", () => {
+  const SAT = "2026-11-21";
+  const SUN = "2026-11-22";
+  let n = 0;
+  const session = (day: string, startMin: number, title: string, groupIds: string[], more: { groupParts?: Record<string, "instructed" | "solo">; cancelled?: boolean } = {}) => ({
+    id: `s${++n}`, day, startMin, endMin: startMin + 25, kind: "track", title, groupIds, groupParts: more.groupParts ?? {}, cancelled: more.cancelled ?? false,
+  });
+  const both = [SAT, SUN];
+  const instructor: PairingPerson = { userId: "rosalind", groupId: "red", solo: true, days: both };
+  const student = (name: string, groupId: string, need: PairedStudent["need"], more: Partial<PairedStudent> = {}): PairedStudent => ({ userId: name.toLowerCase(), name, groupId, solo: need === "ride_along" || need === "check_in", days: both, need, ...more });
+  const owen = student("Owen", "green", "required");
+  const simone = student("Simone", "blue", "instructed");
+  // Saturday keeps the groups apart; Sunday ends with a combined Green and Blue session.
+  const weekend = [
+    session(SAT, 8 * 60, "Green", ["green"]),
+    session(SAT, 9 * 60 + 45, "Blue", ["blue"]),
+    session(SAT, 13 * 60 + 20, "Red", ["red"]),
+    session(SUN, 10 * 60, "Green", ["green"]),
+    session(SUN, 12 * 60 + 50, "Blue", ["blue"]),
+    session(SUN, 14 * 60 + 45, "White", ["white"]),
+    session(SUN, 15 * 60 + 10, "Green and Blue", ["green", "blue"]),
+  ];
+  const doubleBookings = (schedule: typeof weekend, students: PairedStudent[], who = instructor) => pairingClashes(schedule, who, students).filter(isDoubleBooking);
+
+  test("two students in different run groups clash when one combined session puts them on track together", () => {
+    const [clash, ...rest] = doubleBookings(weekend, [owen, simone]);
+    expect(rest).toEqual([]);
+    expect(clash.kind).toBe("together");
+    expect(clash.sessions.map((s) => s.title)).toEqual(["Green and Blue"]);
+    expect(clashText(clash)).toBe("Owen and Simone are on track at the same time: Sun 3:10 PM, Green and Blue.");
+    expect(clashShort(clash)).toBe("clash Sun 3:10 PM");
+    // Without that session there is nothing wrong with the pairing.
+    expect(doubleBookings(weekend.filter((s) => s.title !== "Green and Blue"), [owen, simone])).toEqual([]);
+    // Nor when it is cancelled, or when one of them is not there that day.
+    expect(doubleBookings(weekend.map((s) => (s.title === "Green and Blue" ? { ...s, cancelled: true } : s)), [owen, simone])).toEqual([]);
+    expect(doubleBookings(weekend, [owen, { ...simone, days: [SAT] }])).toEqual([]);
+    expect(doubleBookings(weekend, [owen, simone], { ...instructor, days: [SAT] })).toEqual([]);
+  });
+
+  test("two students in one run group clash in every session, and before there is a schedule at all", () => {
+    const tessa = student("Tessa", "green", "required");
+    const [clash] = doubleBookings(weekend, [owen, tessa]);
+    expect(clash.sameGroup).toBe(true);
+    expect(clash.sessions).toHaveLength(3);
+    expect(clashText(clash)).toBe("Owen and Tessa are in the same run group, so they are on track at the same time.");
+    expect(clashShort(clash)).toBe("same group clash");
+    expect(doubleBookings([], [owen, tessa]).map((c) => c.kind)).toEqual(["together"]);
+    // Unless they come on different days.
+    expect(doubleBookings(weekend, [{ ...owen, days: [SAT] }, { ...tessa, days: [SUN] }])).toEqual([]);
+    expect(doubleBookings([], [{ ...owen, days: [SAT] }, { ...tessa, days: [SUN] }])).toEqual([]);
+  });
+
+  test("a split session keeps the two halves of a run group apart", () => {
+    const split = [
+      session(SAT, 12 * 60 + 45, "Green and Blue Instructed", ["green", "blue"], { groupParts: { blue: "instructed" } }),
+      session(SAT, 13 * 60 + 15, "Blue Solo and White", ["blue", "white"], { groupParts: { blue: "solo" } }),
+    ];
+    const naomi = student("Naomi", "blue", "ride_along");
+    // Simone (Blue Instructed) and Naomi (Blue Solo, a ride-along) are in one run group but never out together.
+    expect(doubleBookings(split, [simone, naomi])).toEqual([]);
+    // Owen (Green) and Simone are out together in the instructed session.
+    expect(doubleBookings(split, [owen, simone]).map((c) => c.sessions.map((s) => s.title))).toEqual([["Green and Blue Instructed"]]);
+  });
+
+  test("a ride-along or check-in is a clash only when no session of theirs is left free", () => {
+    const wendell = student("Wendell", "white", "check_in");
+    const naomi = student("Naomi", "blue", "ride_along");
+    // Wendell's White session is free, so pairing him with Owen and Simone's instructor adds nothing.
+    expect(doubleBookings(weekend, [owen, simone, wendell]).map((c) => c.kind)).toEqual(["together"]);
+    // Naomi is in Blue with Simone: Simone is out in every session Naomi has.
+    const clashes = doubleBookings(weekend, [simone, naomi]);
+    expect(clashes.map((c) => c.kind)).toEqual(["no_session"]);
+    expect(clashText(clashes[0])).toBe("No session is free to ride with Naomi: this instructor's other students are on track in every one.");
+    expect(clashShort(clashes[0])).toBe("no session free");
+    // Two drivers who each need one session never block each other.
+    expect(doubleBookings(weekend, [naomi, student("Victor", "blue", "ride_along")])).toEqual([]);
+  });
+
+  test("the instructor's own session is reported but is not a double booking", () => {
+    const shared = [...weekend, session(SUN, 16 * 60, "Green and Red", ["green", "red"])];
+    const all = pairingClashes(shared, instructor, [owen]);
+    expect(all.map((c) => c.kind)).toEqual(["own"]);
+    expect(clashText(all[0])).toBe("Owen is on track during this instructor's own session: Sun 4:00 PM, Green and Red.");
+    expect(all.filter(isDoubleBooking)).toEqual([]);
+    expect(clashesIfPaired(shared, instructor, [], owen)).toEqual([]);
+  });
+
+  test("pairing reports only the double bookings it would add", () => {
+    const tessa = student("Tessa", "green", "required");
+    // Owen and Simone already clash. Adding Wendell's check-in adds nothing; adding Tessa adds her clashes only.
+    expect(clashesIfPaired(weekend, instructor, [owen, simone], student("Wendell", "white", "check_in"))).toEqual([]);
+    const added = clashesIfPaired(weekend, instructor, [owen, simone], tessa);
+    expect(added.map((c) => c.students.map((s) => s.name).join("+")).sort()).toEqual(["Owen+Tessa", "Simone+Tessa"]);
+    // An instructor with nobody yet can take either student.
+    expect(clashesIfPaired(weekend, instructor, [], simone)).toEqual([]);
+    // Asking about someone they already have does not count them twice.
+    expect(clashesIfPaired(weekend, instructor, [owen], owen)).toEqual([]);
   });
 });

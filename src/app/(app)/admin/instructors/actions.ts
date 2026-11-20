@@ -5,11 +5,12 @@ import { refresh } from "next/cache";
 import { getDb, schema as s } from "@/db";
 import { fullName } from "@/lib/cn";
 import { instructorNeed } from "@/lib/instruction";
+import { clashesIfPaired, clashText } from "@/lib/pairing";
 import type { ActionResult } from "@/lib/types";
-import { getRosterView, usersByIds } from "@/server/admin";
+import { usersByIds } from "@/server/admin";
 import { requireEvent } from "@/server/auth";
 import { notifyUsers } from "@/server/notify";
-import { livePairings } from "@/server/pairings";
+import { pairingBoard } from "@/server/pairing-board";
 import { asFailure, fail, ok, str } from "@/server/util";
 
 async function tellPair(
@@ -126,7 +127,14 @@ export async function assignInstructor(
         .values({ eventId: v.event.id, instructorId, studentId });
     await tellPair(v.event.id, instructorId, studentId);
     refresh();
-    return ok("Paired, and both have been told");
+    // Pairing by hand is allowed to double-book (the administrator may know better), but never silently.
+    const board = await pairingBoard(v.event, v.org.id, v.groups);
+    const [inst, student] = [board.byId.get(instructorId), board.byId.get(studentId)];
+    const clash =
+      inst && student
+        ? clashesIfPaired(board.schedule, board.person(inst), board.studentsOf.get(instructorId) ?? [], board.student(student))[0]
+        : undefined;
+    return ok(clash ? `Paired, and both have been told. Check this: ${clashText(clash)}` : "Paired, and both have been told");
   } catch (err) {
     return asFailure(err);
   }
@@ -134,26 +142,23 @@ export async function assignInstructor(
 
 /**
  * Fill the gaps: give each unpaired student the least-loaded instructor who
- * doesn't already have a student in the same run group (two students in one
- * group are on track at the same time).
+ * can be in the car for them. That is judged from the schedule (see
+ * @/lib/pairing), so a combined session such as "Green and Blue" counts, and a
+ * driver who cannot be paired without a double booking is left for a person to decide.
  */
 export async function suggestPairings(): Promise<ActionResult> {
   try {
     const v = await requireEvent("admin");
     const db = await getDb();
-    const { rows } = await getRosterView(v.event.id, v.org.id);
+    const board = await pairingBoard(v.event, v.org.id, v.groups);
+    const { rows, assignments, schedule } = board;
     const policy = new Map(v.groups.map((g) => [g.id, g.instructorPolicy]));
     const needs = rows.filter(
       (r) => instructorNeed(policy.get(r.groupId), r) !== null,
     );
     const instructors = rows.filter((r) => r.isInstructor);
-    const assignments = await livePairings(v.event.id);
-    const groupOf = new Map(rows.map((r) => [r.userId, r.groupId]));
-    const load = new Map<string, string[]>(
-      instructors.map((i) => [i.userId, []]),
-    );
-    for (const a of assignments)
-      load.get(a.instructorId)?.push(groupOf.get(a.studentId) ?? "");
+    // Each instructor's students so far; pairings made below are added as they are made.
+    const load = board.studentsOf;
     const assigned = new Set(assignments.map((a) => a.studentId));
 
     let made = 0;
@@ -171,8 +176,13 @@ export async function suggestPairings(): Promise<ActionResult> {
       const pick = instructors
         .filter(
           (i) =>
-            !load.get(i.userId)!.includes(student.groupId) &&
-            load.get(i.userId)!.length < 2,
+            load.get(i.userId)!.length < 2 &&
+            !clashesIfPaired(
+              schedule,
+              board.person(i),
+              load.get(i.userId)!,
+              board.student(student),
+            ).length,
         )
         .sort(
           (a, b) => load.get(a.userId)!.length - load.get(b.userId)!.length,
@@ -196,7 +206,7 @@ export async function suggestPairings(): Promise<ActionResult> {
           ],
           set: { instructorId: pick.userId, note: null },
         });
-      load.get(pick.userId)!.push(student.groupId);
+      load.get(pick.userId)!.push(board.student(student));
       await tellPair(v.event.id, pick.userId, student.userId);
       made += 1;
     }

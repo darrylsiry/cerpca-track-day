@@ -102,6 +102,9 @@ async function allowed(kind: "code" | "try", email: string): Promise<boolean> {
   return emailOk && addressOk;
 }
 
+/** The same for everyone, and never contains the code. Migration 0003 rewrote older log rows to this. */
+const SIGN_IN_SUBJECT = "Your Track Day sign-in code";
+
 export async function issueSignInCode(rawEmail: string): Promise<{ devCode?: string; limited?: boolean }> {
   const email = rawEmail.trim().toLowerCase();
   if (!(await allowed("code", email))) return { limited: true };
@@ -120,10 +123,12 @@ export async function issueSignInCode(rawEmail: string): Promise<{ devCode?: str
   if (!user) return {};
 
   // The email goes out after the answer has been sent, for the same reason.
+  // The code is in the body only: subjects are kept in the delivery log, which
+  // administrators can read, and a code there would let them sign in as someone else.
   after(async () => {
     await sendEmail({
       to: email,
-      subject: `${code} is your Track Day sign-in code`,
+      subject: SIGN_IN_SUBJECT,
       text: `Your sign-in code is ${code}. It expires in ${CODE_MINUTES} minutes.\n\nIf you did not ask for this, you can ignore this email.`,
       userId: user.id,
       kind: "signin",

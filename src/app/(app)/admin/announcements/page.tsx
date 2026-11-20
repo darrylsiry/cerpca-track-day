@@ -15,7 +15,7 @@ import { getDb, schema as s } from "@/db";
 import { fullName, plural } from "@/lib/cn";
 import { partName } from "@/lib/schedule";
 import { dateTime, relativeTime } from "@/lib/time";
-import { getRosterView, usersByIds } from "@/server/admin";
+import { deliveryLog, getRosterView, usersByIds } from "@/server/admin";
 import { requireAdmin } from "@/server/auth";
 import { livePairings } from "@/server/pairings";
 import { channelStatus } from "@/server/notify";
@@ -69,11 +69,8 @@ export default screen(async function AnnouncementsPage({
   );
 
   if (tab === "log") {
-    const log = await db
-      .select()
-      .from(s.messageLog)
-      .orderBy(desc(s.messageLog.createdAt))
-      .limit(150);
+    // This region's messages only: the log shows addresses and subjects.
+    const log = await deliveryLog(v.org.id);
     return (
       <>
         <PageHeader

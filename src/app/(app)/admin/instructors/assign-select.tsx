@@ -9,7 +9,8 @@ export type InstructorOption = {
   id: string;
   name: string;
   load: number;
-  clash: boolean;
+  /** Why pairing this student with them would double-book them ("clash Sun 3:10 PM"), or null. */
+  clash: string | null;
 };
 
 /** Picking a name pairs the student straight away; both people get an alert. */
@@ -52,7 +53,7 @@ export function AssignSelect({
           {o.load === 0
             ? "free"
             : `${o.load} student${o.load === 1 ? "" : "s"}`}
-          {o.clash ? " · same group clash" : ""}
+          {o.clash ? ` · ${o.clash}` : ""}
         </option>
       ))}
     </select>

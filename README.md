@@ -46,11 +46,11 @@ PGlite allows one process at a time. Do not run the `db:*` scripts while the dev
 - Roster with search, filters, check-in, add and edit, import from a ClubRegistration.net export, CSV export. Importing again keeps a run group that was changed in the app, and says so in the preview.
 - Driver file: contact, car, admin-only notes, session notes, promotion history, event history, roles.
 - Schedule editor: add, edit, cancel (alerts the people in the session), delay or advance the rest of the day, copy from another event. Moving a session to another run group alerts the group that lost it too. A slot can be for one run group, several, or one half of Blue ("Blue Solo and White", "Green and Blue Instructed").
-- Instructor pairing, with automatic suggestions and clash warnings. Solo drivers join the list when they ask for a ride-along or an administrator adds a check-in. When an instructor leaves the event or stops instructing, their students are unpaired again and told.
+- Instructor pairing, with automatic suggestions and clash warnings. A clash is worked out from the schedule, so a combined session ("Green and Blue") counts and the warning names the session; automatic pairing never creates one. Solo drivers join the list when they ask for a ride-along or an administrator adds a check-in. When an instructor leaves the event or stops instructing, their students are unpaired again and told.
 - Tech inspection: review queue with automatic flags, request changes, grid tech and sticker issue, shop registry.
 - Waivers: who has signed what, reminders, document templates.
 - Promotions: sign off or decline recommendations; every decision is kept.
-- Announcements to everyone, run groups, instructors or students, and a delivery log.
+- Announcements to everyone, run groups, instructors or students, and a delivery log limited to the administrator's own region. Sign-in codes are never kept in it.
 - Incident reports in the PCA form's layout, with due dates, a sketch pad and a print view.
 - Events and history: every event keeps its own records; open a past event to see them.
 

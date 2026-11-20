@@ -35,6 +35,7 @@ async function log(row: typeof s.messageLog.$inferInsert) {
 
 export async function sendEmail(input: {
   to: string;
+  /** Always kept in the delivery log, which administrators read: never put a code, link or other secret in it. */
   subject: string;
   text: string;
   userId?: string | null;
