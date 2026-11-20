@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-022 — Say when the screen has stopped updating</title>
+<style>
+body{margin:0;background:#f3f2ee;color:#16181b;font:15px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;padding:24px}
+h1{font:800 22px/1.1 "Arial Narrow",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0 0 16px}
+.cols{display:flex;gap:32px;flex-wrap:wrap}
+.col{width:375px}
+.lab{font:800 13px "Arial Narrow",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.08em;color:#555;margin-bottom:8px}
+.phone{background:#eceae4;border:1px solid #ccc;border-radius:22px;padding:14px}
+.board{background:#2e8b3e;color:#fff;border-radius:18px;padding:16px 18px}
+.eb{font:800 11px "Arial Narrow",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;opacity:.85}
+.big{font:900 64px/0.9 "Arial Narrow",system-ui,sans-serif;text-transform:uppercase;margin-top:8px}
+.cd{font:700 34px ui-monospace,Menlo,monospace}
+.you{margin-top:12px;background:#fff;border:1px solid #ddd;border-radius:18px;padding:14px 16px}
+.grid{background:#ffd23f;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-end}
+.t{font:900 30px/1 "Arial Narrow",system-ui,sans-serif;text-transform:uppercase}
+.mono{font-family:ui-monospace,Menlo,monospace;font-weight:700}
+.stale{background:#fdf0d5;border:1px solid #d99a1a;border-left:8px solid #16181b;border-radius:14px;padding:10px 14px;margin-bottom:12px;font-weight:700}
+.stale small{display:block;font-weight:400;margin-top:2px}
+.chg{outline:3px dashed #c0392b;outline-offset:3px}
+.note{font-size:13px;color:#555;margin-top:10px}
+</style></head><body>
+<h1>UX-022 · Now screen with no signal</h1>
+<div class="cols">
+<div class="col"><div class="lab">Before</div><div class="phone">
+ <div class="board"><div class="eb">● On track now · 10:10–10:30</div>
+  <div class="big">Green</div><div class="cd">04:12 <span class="eb">left in session</span></div></div>
+ <div class="you"><div class="eb" style="color:#555">You</div>
+  <div class="grid"><div><div class="eb">Head to the grid</div><div class="t">Blue Solo</div>
+   <div class="mono" style="font-size:14px">10:35–10:55 · False grid</div></div>
+   <div style="text-align:right"><div class="cd" style="font-size:28px">08:41</div><div class="eb">to go</div></div></div></div>
+ <p class="note">Looks live. The day was actually delayed 15 minutes eight minutes ago; this phone hasn't heard.</p>
+</div></div>
+<div class="col"><div class="lab">After</div><div class="phone">
+ <div class="stale chg">No connection · schedule as of 10:02 AM
+  <small>Times may have changed: check the board at the tower.</small></div>
+ <div class="board"><div class="eb">● On track now · 10:10–10:30</div>
+  <div class="big">Green</div><div class="cd">04:12 <span class="eb">left in session</span></div></div>
+ <div class="you"><div class="eb" style="color:#555">You</div>
+  <div class="grid"><div><div class="eb">Head to the grid</div><div class="t">Blue Solo</div>
+   <div class="mono" style="font-size:14px">10:35–10:55 · False grid</div></div>
+   <div style="text-align:right"><div class="cd" style="font-size:28px">08:41</div><div class="eb chg">to go, if on time</div></div></div></div>
+ <p class="note">The strip appears after 60 s without a successful update, and clears on the next one.</p>
+</div></div>
+</div></body></html>

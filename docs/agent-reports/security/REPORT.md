@@ -4,21 +4,30 @@
 change a finding's status to `Accepted`; the next run overwrites everything else. Coding agents: fix
 items top-down by severity and cite the `SEC-NNN` ID.*
 
-- **Run:** 2026-11-16 14:46
-- **Code version:** `ba0ba61f`
-- **Previous run:** none
+- **Run:** 2026-11-19 18:24
+- **Code version:** `b03e3116`
+- **Previous run:** 2026-11-16 14:46
 
 ## Summary
 
 | Severity | Open | New this run | Resolved this run |
 |----------|------|--------------|-------------------|
 | Critical | 0 | 0 | 0 |
-| High | 1 | 1 | 0 |
-| Medium | 4 | 4 | 0 |
-| Low | 6 | 6 | 0 |
-| Informational | 1 | 1 | 0 |
+| High | 1 | 1 | 1 |
+| Medium | 4 | 0 | 0 |
+| Low | 6 | 1 | 1 |
+| Informational | 1 | 0 | 0 |
 
-Authorization is generally sound. Every Server Action, admin page and route handler checks the role on the server, and most ids from the client are tied to the caller's event or region. There is no SQL built from strings and no `dangerouslySetInnerHTML`. The most important fix is the sign-in code check (SEC-001): with demo mode off, it can be guessed with parallel requests, which would let someone sign in as any member, including an administrator. Today nothing goes beyond what demo mode already allows on the live site. The one tooling issue (SEC-011) could let the writing acceptance tests run against the live demo.
+Two of last run's findings are fixed:
+
+- **Sign-in code guessing (SEC-001):** counting is now atomic, there are limits per email address and per network address, the comparison is constant-time, and a code can be used only once.
+- **UAT live-site bypass (SEC-011):** the acceptance-test harness now checks addresses by parsing them, so the writing tests can no longer be pointed at the live site.
+
+Authorization in Server Actions and route handlers is otherwise still sound.
+
+The most important fix is new: SEC-013. Every sign-in code is written in plain text into the email subject line stored in `message_log`. The administrators' delivery log shows that log for every region. Once demo mode is off, any administrator could read another member's live code and sign in as them.
+
+Nothing goes beyond what demo mode already allows on the live site today.
 
 ## Critical
 
@@ -26,203 +35,284 @@ None.
 
 ## High
 
-### SEC-001 — Make sign-in code attempts atomic and add per-address and per-account limits
+### SEC-013 — Keep sign-in codes out of the delivery log, and limit that log to the administrator's own region
 - **Status:** New
 - **Live risk:** real-data-only
-- **Where:** `src/server/auth.ts:76-80`, `src/server/auth.ts:96-113`, `src/app/login/actions.ts:12-30`
-- **Problem:** The 6-digit code can be brute-forced (broken authentication: a race condition plus missing rate limits).
-  - The attempt counter is a read, then a compare, then a separate write: `select … attempts` → `if (row.attempts >= 5)` → `update … set attempts: row.attempts + 1`. Concurrent guesses all read the same value, so the 5-attempt cap only counts rounds of requests, not guesses.
-  - Nothing limits requests per IP address or per caller.
-  - The "5 codes per 15 minutes" cap applies per code. An attacker can ask for fresh codes, each with its own 5 attempts, which adds up to about 2,400 guesses per account per day even without the race.
-  - Using up a code is also not atomic (`update … set consumedAt` has no `consumedAt IS NULL` condition), so one code can open several sessions.
-  - Smaller issue: for a non-member, `issueSignInCode` returns at once. For a member, it inserts a row and calls Resend first. The difference in response time shows who is a member, even though the screen text is the same.
-- **Evidence:** Lines 99-108 of `auth.ts`. Example: an attacker requests a code for a region officer's address (often public), then sends a few thousand concurrent `signInStep` Server Action POSTs (`intent` empty, `code` = 000000…999999). Each batch raises `attempts` by about 1, so most guesses are checked. Re-requesting codes resets the budget.
-- **Fix:** In `verifySignInCode`:
-  - Count the attempt atomically before comparing: `UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1 AND attempts < 5 AND consumed_at IS NULL RETURNING code_hash`. Compare only if a row comes back.
-  - Use up the code with `… SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL RETURNING id`.
-  - Lock the account after a set number of failures summed across all its codes (for example 10 per hour per email).
-  - Limit per IP address on both steps (a table keyed by IP and time window, or Vercel WAF rate limiting on `/login`).
-  - Compare with `timingSafeEqual`.
-  - Make both branches of `issueSignInCode` take similar time: do the send after responding, or always do the same work.
-- **Verify:** A test that fires 50 concurrent wrong guesses at one code ends with `attempts = 5` and at most 5 comparisons made. A sixth request for the same email within the window is refused. Two concurrent correct submissions create one session, not two.
+- **Where:**
+  - `src/server/auth.ts:123-131`
+  - `src/server/notify.ts:62-73`
+  - `src/app/(app)/admin/announcements/page.tsx:72-76`
+  - `src/app/(app)/admin/announcements/page.tsx:118-123`
+- **Problem:** Credential exposure plus a missing tenant boundary, which lets an administrator take over other accounts.
+  - The sign-in email's subject is `` `${code} is your Track Day sign-in code` ``.
+  - `sendEmail` withholds the body when `redactBody: true` but always stores `subject: input.subject` in `message_log`, whether the mail was sent or only simulated.
+  - The delivery log tab (`/admin/announcements?tab=log`) runs `db.select().from(s.messageLog).orderBy(desc(createdAt)).limit(150)` with no region filter. It shows `m.subject`, `m.toAddress` and `m.kind` for every message in the system.
+  - So any administrator, in any region, sees a stream of rows like "`482913 is your Track Day sign-in code` · to treasurer@… · signin". Codes are valid for 10 minutes.
+  - The log also leaks every other region's email addresses and message subjects.
+- **Evidence:**
+  - `notify.ts:66-68`: `toAddress: input.to, subject: input.subject, body: input.redactBody ? "(contents withheld from the log)" : input.text`.
+  - Attack: an administrator of region A types a fellow administrator's address (or a region-B administrator's) into `/login` in a private window, then opens the delivery log. They read the six digits from the newest `signin` row and enter them. They are now signed in as that person, and `verifySignInCode` cannot tell the difference.
+  - The same holds for anyone with read access to the `message_log` table.
+- **Fix:**
+  - Take the code out of the subject in `issueSignInCode`, for example `"Your Track Day sign-in code"`, and leave it only in the (already redacted) body.
+  - In `sendEmail`, also redact `subject` when `redactBody` is set.
+  - Scrub existing rows: `UPDATE message_log SET subject = '(sign-in code)' WHERE kind = 'signin';`.
+  - Scope the delivery log to `v.org.id`: join `message_log.event_id` to `events.org_id`, or `user_id` to `memberships.org_id`. Leave out `kind = 'signin'` rows, or show them with the address only.
+- **Verify:**
+  - Request a code, then `SELECT subject FROM message_log WHERE kind='signin' ORDER BY created_at DESC LIMIT 1` contains no digits.
+  - With two regions seeded, region A's delivery log lists no row addressed to a region-B-only member.
 
 ## Medium
 
 ### SEC-002 — Stop `/api/live` from revealing announcement titles to people they were not sent to
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
 - **Where:** `src/app/api/live/route.ts:22-29`, `src/components/shell/live-sync.tsx:35`
-- **Problem:** Information disclosure across roles. The route returns `t`, the title of the newest announcement in the whole region, to every signed-in member. It ignores the announcement's audience (`admins`, `instructors`, `students`, chosen groups), and `LiveSync` shows it as a toast: "New announcement: …".
-- **Evidence:** `.from(s.announcements).where(eq(s.announcements.orgId, m.orgId)).orderBy(desc(createdAt)).limit(1)` has no audience filter. Example: an administrator sends an `admins`-only announcement titled "Incident T5: Owen G. to hospital". Every driver's open app shows that title within 20 seconds.
-- **Fix:** Work out `a` and `t` from the caller's own `notifications` rows (`kind = 'announcement' AND user_id = $me`, newest first), or drop `t` and keep only a value that changes when something does.
-- **Verify:** Sign in as a Green driver, have an admin send an admins-only announcement, and check that `/api/live` returns neither its id nor its title.
+- **Problem:** Information disclosure across roles.
+  - The route returns `t`, the title of the newest announcement in the whole region, to every signed-in member. It ignores the audience (`admins`, `instructors`, `students`, chosen groups).
+  - `LiveSync` then shows the title as a toast: "New announcement: …".
+- **Evidence:**
+  - The query `.from(s.announcements).where(eq(s.announcements.orgId, m.orgId)).orderBy(desc(createdAt)).limit(1)` has no audience filter.
+  - Example: an administrator sends an `admins`-only announcement titled "Incident T5: Owen G. to hospital". Every driver with the app open sees that title within 20 seconds.
+- **Fix:** Work out `a` and `t` from the caller's own `notifications` rows (`kind = 'announcement' AND user_id = $me`, newest first). Alternatively, drop `t` and return only a value that changes when something does.
+- **Verify:** Sign in as a Green driver and have an administrator send an admins-only announcement. `/api/live` returns neither its id nor its title.
 
-### SEC-003 — Limit administrator edits of people to members of their own region, and protect email changes
-- **Status:** New
+### SEC-003 — Limit administrator edits of people to their own region's members, and protect email changes
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
-- **Where:** `src/app/(app)/admin/roster/actions.ts:72-88` (`savePerson`), `:262-269` (`addDriverNote`); `src/app/(app)/admin/instructors/actions.ts:77-125` (`assignInstructor`, `studentId`); `src/app/(app)/admin/promotions/actions.ts:179-182` (`promoteDirect`, `toGroupId`)
-- **Problem:** Insecure direct object reference across regions, plus account takeover by changing an email address.
-  - `savePerson` runs `update users … where id = <userId from form>` with no check that the user belongs to `v.org`. The update includes `email`, and the email address is the whole sign-in credential. So an administrator can point any user's email (another region's administrator, or a fellow administrator) at a mailbox they control, then sign in as that person.
-  - When no id is sent, `existing` is found by email across all regions, and that person's contact details are overwritten.
-  - `addDriverNote` accepts any `userId`. `assignInstructor` does not check that the student is registered. `promoteDirect` stores a `toGroupId` that is never checked against `v.groups`.
-- **Evidence:** `await db.update(s.users).set(person).where(eq(s.users.id, id));` with `id = str(fd, "userId")`. The app is built for several regions (README "Other regions and tracks").
+- **Where:**
+  - `src/app/(app)/admin/roster/actions.ts:87-99` (`savePerson`)
+  - `src/app/(app)/admin/roster/actions.ts:294-301` (`addDriverNote`)
+  - `src/app/(app)/admin/instructors/actions.ts:78-126` (`assignInstructor`, `studentId`)
+  - `src/app/(app)/admin/promotions/actions.ts:179-182` (`promoteDirect`, `toGroupId`)
+  - `src/app/(app)/admin/incidents/actions.ts:191` (`driverUserId`)
+  - `src/app/(app)/instructor/[studentId]/page.tsx:46-55` and `src/app/(app)/admin/roster/[userId]/page.tsx:98-106` (session logs and promotions read with no region filter)
+- **Problem:** Insecure direct object references across regions, plus account takeover by changing an email address.
+  - `savePerson` runs `update users … where id = <userId from form>` without checking that the user belongs to `v.org`. The update includes `email`, and the email address is the whole sign-in credential. An administrator can point any user's address (another region's administrator, or a fellow administrator) at a mailbox they control, then sign in as that person. The victim's existing sessions are not ended.
+  - When no id is sent, `existing` is looked up by email across all regions, and that person's contact details are overwritten.
+  - `addDriverNote` accepts any `userId`. `assignInstructor` does not check that the student is registered for the event. `promoteDirect` stores a `toGroupId` that is never checked against `v.groups`. `saveIncident` stores any `driverUserId`.
+  - The instructor's student page and the administrator's driver page list a person's session logs and promotions from every region.
+- **Evidence:**
+  - `await db.update(s.users).set(person).where(eq(s.users.id, id));` with `id = str(fd, "userId")`.
+  - The app is built for several regions (README "Other regions and tracks").
 - **Fix:**
   - Before any write, require a `memberships` row for `(v.org.id, userId)`.
-  - Do not let `savePerson` change the email of someone who already has a membership in another region, or who is an administrator. Record email changes in an audit table, notify the old address, and delete that user's `sessions`.
-  - Check `studentId` against the event's registrations, and `toGroupId` against `v.groups`.
-- **Verify:** With two regions seeded, an admin of region A posting `savePerson` with a region-B user id gets an error and no row changes. Changing a member's email deletes their sessions and emails the old address.
+  - Refuse an email change for anyone who is an administrator or a member of another region. For other email changes, record them in an audit table, notify the old address, and `DELETE FROM sessions WHERE user_id = $1`.
+  - Check `studentId` against the event's registrations and `toGroupId` against `v.groups`.
+  - Filter `session_logs` and `promotions` reads by `events.org_id` / `promotions.org_id`.
+- **Verify:**
+  - With two regions seeded, an administrator of region A who posts `savePerson` with a region-B user id gets an error, and no row changes.
+  - Changing a member's email deletes their sessions and emails the old address.
 
 ### SEC-004 — Don't give the driver the shop's sign-off link
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
-- **Where:** `src/app/(app)/me/tech/actions.ts:161-181`, `src/app/(app)/me/tech/steps.tsx:102-129`
-- **Problem:** Broken separation of duties: the driver can sign as the shop. Whenever the email is not `"sent"` (no provider configured, or Resend returns an error), `inviteShop` returns the one-time shop link to the driver, and the UI offers Copy and Open. That holds even for a shop picked from the region's registry, whose email "the driver never types". The driver can then fill in and sign the technician's checklist. The record shows a verified shop, so `techFlags` raises no "unverified shop" flag, and the seal makes it look genuine. Tech approval is a safety control.
-- **Evidence:** `return { …, emailed: delivery === "sent", link: delivery === "sent" ? undefined : link };`.
+- **Where:** `src/app/(app)/me/tech/actions.ts:180-181`, `src/app/(app)/me/tech/steps.tsx:125`, `src/app/(app)/me/tech/steps.tsx:281-282`
+- **Problem:** Broken separation of duties: the driver can sign as the shop.
+  - Whenever the email does not go out (no provider configured, or Resend returns an error), `inviteShop` returns the one-time shop link to the driver. The screen offers Copy and Open buttons.
+  - This happens even for a shop picked from the region's registry, where the code promises the link "always goes to the address the region holds".
+  - The driver can then fill in and sign the technician's checklist. Because the shop is a verified registry entry, `techFlags` raises no "unverified shop" flag, and the seal makes the record look genuine.
+  - Tech approval is a safety control.
+- **Evidence:** `return { …, emailed: delivery === "sent", link: delivery === "sent" ? undefined : link };`. A Resend outage or a mistyped `EMAIL_FROM` in production is enough to trigger it.
 - **Fix:**
-  - Never return the link to the driver. If delivery fails, record it and tell the driver to contact the region, with an admin action to resend or reveal the link.
-  - If a hand-off is still wanted for shops not in the registry, store a `linkHandedToDriver` flag on the inspection and have `shopVerified`/`techFlags` treat it as unverified.
-- **Verify:** With email not configured, `inviteShop` for a registry shop returns no `link`. The admin tech view flags any form whose link went to the driver.
+  - Never return the link to the driver. If delivery fails, record it and tell the driver to contact the region. Give administrators an action to resend or reveal the link.
+  - If a hand-off is still wanted for shops not in the registry, store a `linkHandedToDriver` flag on the inspection, and have `shopVerified`/`techFlags` treat that form as unverified.
+- **Verify:** With email not configured, `inviteShop` for a registry shop returns no `link`. The administrator's tech view flags any form whose link went to the driver.
 
-### SEC-005 — Store tech-form uploads privately, not as public permanent Blob URLs
-- **Status:** New
+### SEC-005 — Store tech-form uploads privately, not as permanent public Blob URLs
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
-- **Where:** `src/server/storage.ts:38-41`, `src/app/(app)/me/tech/actions.ts:212-252`
-- **Problem:** Sensitive files are reachable by anyone who has the link. Photos and PDFs of signed paper tech forms (driver name, car, signatures, often emergency contacts) go to Vercel Blob with `access: "public"`.
-  - Anyone holding the URL can read the file forever, with no sign-in, and it is cached at the edge. URLs leak through forwarded links, browser history, screenshots and logs.
-  - Replacing or re-uploading never deletes the old blob.
+- **Where:** `src/server/storage.ts:38-41`, `src/app/(app)/me/tech/actions.ts:212-230`
+- **Problem:** Sensitive files are readable by anyone who has the link.
+  - Photos and PDFs of signed paper tech forms (driver name, car, signatures, often emergency contacts) go to Vercel Blob with `access: "public"`.
+  - Anyone holding the URL can read the file forever, without signing in, and it is cached at the edge. URLs leak through forwarded links, browser history, screenshots and logs.
+  - Replacing or re-uploading a form never deletes the old blob.
   - `UPLOAD_TYPES[file.type]` trusts the content type the browser sends; the file's actual bytes are never checked.
-  - The local `/api/files` path does check owner or admin, so the protection differs between development and production.
-- **Evidence:** `put(\`${segments.join("/")}/${name}\`, file, { access: "public", contentType: file.type, … })`, and `paperFile: ref` overwrites the old reference with no `del()`.
-- **Fix:** Use Vercel Blob private storage (or another private store). Serve files only through an authenticated route such as `/api/files/...` with the same owner-or-admin check, or through short-lived signed URLs. Call `del()` on the previous blob when a form is replaced or a person is removed. Check the file's leading "magic" bytes against the declared type.
-- **Verify:** Upload a form, sign out, and request the stored reference: the response is 401 or 403. Upload again and confirm the first object no longer exists.
+  - The local `/api/files` path does check owner or administrator, so protection differs between development and production.
+- **Evidence:** `put(\`${segments.join("/")}/${name}\`, file, { access: "public", contentType: file.type, … })`. `paperFile: ref` overwrites the previous reference without calling `del()`.
+- **Fix:**
+  - Use private Blob storage (or another private store). Serve files only through an authenticated route such as `/api/files/...` with the same owner-or-administrator check, or through short-lived signed URLs.
+  - Call `del()` on the previous blob when a form is replaced or a person is removed.
+  - Check the file's leading "magic" bytes against the declared type.
+- **Verify:** Upload a form, sign out, and request the stored reference: the response is 401 or 403. Upload again, and the first object no longer exists.
 
 ## Low
 
 ### SEC-006 — Add security headers (frame-ancestors/CSP, nosniff, HSTS, Referrer-Policy)
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
 - **Where:** `next.config.ts:3-25` (no `headers()`)
 - **Problem:** Missing hardening headers.
-  - Nothing stops the app from being framed, so one-tap admin actions (issue sticker, approve tech, cancel session) can be clickjacked.
-  - There is no Content-Security-Policy, so no second line of defence against XSS.
-  - There is no `X-Content-Type-Options` outside `/api/files`, and no HSTS for the custom domain.
-  - The shop token is in the `/tech/<token>` path, so a strict `Referrer-Policy` matters there.
-- **Evidence:** `nextConfig` has no `headers` key, and the proxy sets none.
+  - Nothing stops the app from being framed, so one-tap administrator actions (issue a sticker, approve tech, cancel a session) can be clickjacked.
+  - There is no Content-Security-Policy as a second line of defence.
+  - `X-Content-Type-Options` is set only on `/api/files`, and there is no HSTS for the custom domain.
+  - The shop token sits in the `/tech/<token>` path, so a strict `Referrer-Policy` matters there.
+- **Evidence:** `nextConfig` has no `headers` key, and `src/proxy.ts` sets none.
 - **Fix:** Add `async headers()` for `/:path*` with:
-  - `Content-Security-Policy: frame-ancestors 'none'; default-src 'self'; img-src 'self' data: blob: https://*.public.blob.vercel-storage.com; …` (nonce-based for scripts if feasible)
+  - `Content-Security-Policy: frame-ancestors 'none'; default-src 'self'; img-src 'self' data: blob: https://*.public.blob.vercel-storage.com; …` (nonce-based scripts if feasible)
   - `X-Frame-Options: DENY`
   - `X-Content-Type-Options: nosniff`
   - `Referrer-Policy: no-referrer` (at least on `/tech/*`)
   - `Strict-Transport-Security: max-age=63072000; includeSubDomains`
   - `Permissions-Policy: camera=(), geolocation=()`
-- **Verify:** `curl -I` against a local production build shows the headers on `/home`, `/login` and `/tech/x`.
+- **Verify:** `curl -I` against a local production build shows these headers on `/home`, `/login` and `/tech/x`.
 
 ### SEC-007 — Stop returning raw error messages from Server Actions
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
-- **Where:** `src/server/util.ts:25-30`, `src/app/(app)/admin/roster/actions.ts:453-461`
-- **Problem:** Verbose errors. `asFailure` sends `err.message` back to the browser for every thrown error. With Drizzle, a failed query's message contains the SQL text and its bound parameters. The roster import does the same.
-- **Evidence:** `return fail(err instanceof Error && err.message ? err.message : "…")`. Example: `addDriverNote` with a non-existent `userId` violates a foreign key, and the admin sees `Failed query: insert into "driver_notes" … params: …`.
+- **Where:** `src/server/util.ts:25-30`, `src/app/(app)/admin/roster/actions.ts:601-609`, `src/app/tech/[token]/actions.ts:121-124`
+- **Problem:** Verbose errors.
+  - `asFailure` sends `err.message` back to the browser for every thrown error. The roster import does the same.
+  - With Drizzle, a failed query's message includes the SQL and its bound parameters.
+  - This includes the unauthenticated shop form.
+- **Evidence:** `return fail(err instanceof Error && err.message ? err.message : "…")`. Example: `addDriverNote` with a non-existent `userId` violates a foreign key, and the administrator sees `Failed query: insert into "driver_notes" … params: …`.
 - **Fix:** Pass through only errors the app throws on purpose (a `UserFacingError` class). Log everything else on the server and return a generic message.
-- **Verify:** Force a database error in an action and check that the response contains no `Failed query` or SQL.
+- **Verify:** Force a database error in an action; the response contains no `Failed query` or SQL.
 
 ### SEC-008 — Make the example settings safe to copy, and compare the cron secret in constant time
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
 - **Where:** `.env.example:5`, `.env.example:14`, `src/app/api/cron/reminders/route.ts:25-27`
-- **Problem:** Insecure defaults. `.env.example` turns on `DEMO_MODE=1` and sets `CRON_SECRET=change-me`. Copying it to a host as-is gives one-tap admin sign-in and a guessable cron secret. With that secret, an unauthenticated caller can run the reminder job and read event, reminder and recipient counts. The cron route compares strings with `!==`. The route does refuse when `CRON_SECRET` is missing, which is correct.
+- **Problem:** Insecure defaults.
+  - `.env.example` turns on `DEMO_MODE=1` and sets `CRON_SECRET=change-me`. Copied to a host as-is, it gives one-tap administrator sign-in and a guessable cron secret.
+  - With that secret, an unauthenticated caller can trigger the reminder job and read event, reminder and recipient counts.
+  - The route compares the secret with `!==`.
+  - The route correctly refuses when `CRON_SECRET` is missing.
 - **Evidence:** `DEMO_MODE=1` and `CRON_SECRET=change-me` in the example file. The route checks `request.headers.get("authorization") !== \`Bearer ${secret}\``.
-- **Fix:** Ship `DEMO_MODE=` (empty) and `CRON_SECRET=` (empty) with a comment to generate the secret (`openssl rand -hex 32`). Refuse secrets shorter than 32 characters or equal to `change-me`. Compare with `timingSafeEqual`.
+- **Fix:**
+  - Ship `DEMO_MODE=` and `CRON_SECRET=` empty, with a comment to generate the secret (`openssl rand -hex 32`).
+  - Refuse secrets shorter than 32 characters, or equal to `change-me`.
+  - Compare with `timingSafeEqual`.
 - **Verify:** With `CRON_SECRET=change-me`, the route returns 401 or 500 and logs a configuration error.
 
 ### SEC-009 — Fail closed when the database is not configured or TLS is not required
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
-- **Where:** `src/db/index.ts:41`, `src/db/index.ts:46-67`
+- **Where:** `src/db/index.ts:41`, `src/db/index.ts:46-68`, `scripts/db-migrate.ts:13`
 - **Problem:** Configuration fails open.
-  - With no `DATABASE_URL`, even with `NODE_ENV=production`, the app quietly creates a local PGlite database and seeds the demo region, including administrator accounts. On Vercel the read-only filesystem probably makes this fail. On any other host it would silently serve a separate demo database.
+  - With no `DATABASE_URL`, even when `NODE_ENV=production`, the app quietly creates a local PGlite database and seeds the demo region, including administrator accounts.
   - `pinSslMode` only rewrites an existing `sslmode=prefer|require|verify-ca`. A URL with no `sslmode`, or with `sslmode=disable`, connects without verified TLS.
-- **Evidence:** `if (process.env.DATABASE_URL) {…}` falls through to `new PGlite(dir)` and `seed(db)`.
-- **Fix:** In production, throw if `DATABASE_URL` is missing. Add `sslmode=verify-full` when no `sslmode` is present, and refuse `disable`/`allow`/`prefer` outside development.
-- **Verify:** Running `next start` with no `DATABASE_URL` stops with a clear error. `pinSslMode("postgres://h/db")` returns a URL with `sslmode=verify-full`.
+- **Evidence:** `if (process.env.DATABASE_URL) {…}` falls through to `new PGlite(dir)` and `seed(db)`. The regex `/([?&]sslmode=)(prefer|require|verify-ca)\b/` does nothing when `sslmode` is absent.
+- **Fix:**
+  - In production, throw if `DATABASE_URL` is missing.
+  - Add `sslmode=verify-full` when no `sslmode` is present, and refuse `disable`, `allow` and `prefer` outside development.
+- **Verify:** `next start` with no `DATABASE_URL` stops with a clear error. `pinSslMode("postgres://h/db")` returns a URL with `sslmode=verify-full`.
 
 ### SEC-010 — Resolve the `npm audit` high findings and pin runtime dependencies
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** real-data-only
-- **Where:** `package.json:17-28`, `package-lock.json`
-- **Problem:** Vulnerable and unpinned dependencies. `npm audit --omit=dev` reports 4 high-severity issues, all one chain: `@vercel/blob` → `@vercel/oidc` (3.6.0–4.0.5) → `@vercel/cli-config` (≤0.3.5) → nested `zod` <4.6.6 (GHSA-mrhx-c7xc-m3w5, memory exhaustion, CVSS 7.5). Runtime dependencies use caret ranges (`^2.9.0`, `^8.23.1`, …).
+- **Where:** `package.json:16-29`, `package-lock.json`
+- **Problem:** Vulnerable and unpinned dependencies.
+  - `npm audit --omit=dev` still reports 4 high-severity issues, all one chain: `@vercel/blob` → `@vercel/oidc` (3.6.0–4.0.5) → `@vercel/cli-config` (≤0.3.5) → nested `zod` <4.6.6 (GHSA-mrhx-c7xc-m3w5, memory exhaustion, CVSS 7.5).
+  - Runtime dependencies use caret ranges (`^2.9.0`, `^8.23.1`, `^0.45.4`, …).
 - **Evidence:** `checks/npm-audit.json`: `"high": 4, "total": 4`. The suggested fix is `@vercel/blob@2.4.0`, flagged as semver-major.
-- **Fix:** Upgrade `@vercel/blob` to a release whose `@vercel/oidc` no longer pulls the old `zod`, or add an `overrides` entry for `zod >=4.6.6` under `@vercel/cli-config`. Pin exact versions for runtime dependencies and rely on the lock file plus Dependabot or Renovate.
+- **Fix:**
+  - Move `@vercel/blob` to a release whose `@vercel/oidc` no longer pulls the old `zod`, or add an `overrides` entry forcing `zod >=4.6.6` under `@vercel/cli-config`.
+  - Pin exact versions for runtime dependencies, and rely on the lock file plus Dependabot or Renovate.
 - **Verify:** `npm audit --omit=dev` reports 0 high or critical.
 
-### SEC-011 — Stop the writing acceptance tests from being pointed at the live site
+### SEC-014 — Stop strangers from locking members out of sign-in
 - **Status:** New
-- **Live risk:** live-now
-- **Where:** `uat/playwright.config.ts:14-18`, `uat/tests/sandbox/fixtures.ts:11`, `scripts/uat.sh:47-49`, `scripts/uat.sh:92-95`, `scripts/review-guard.py:35`
-- **Problem:** A bypass in the test harness's "never write to the live site" guarantee. Three things combine:
-  - The local-only check is the regex `^http:\/\/(127\.0\.0\.1|localhost)(:|\/|$)`, which accepts a URL with a userinfo part, such as `http://127.0.0.1:@cerpca.siryous.app`. Its real host is the live site.
-  - `uat.sh` builds `SANDBOX` from `UAT_PORT`, and with `UAT_REUSE=1` it skips its own sandbox when the "sandbox" answers.
-  - The guard's allowed pattern for the UAT agent removes only `scripts/uat.sh …`, so environment variables put in front of it are allowed.
-- **Evidence:** Running `UAT_REUSE=1 UAT_PORT=@cerpca.siryous.app scripts/uat.sh sandbox` gives `SANDBOX=http://127.0.0.1:@cerpca.siryous.app`. That passes both regexes. Playwright's origin is the live host, and because demo sign-in is on there, the sandbox suite's writes would land on the live database.
+- **Live risk:** real-data-only
+- **Where:** `src/server/auth.ts:85-103`, `src/server/auth.ts:105-107`, `src/server/auth.ts:138-150`
+- **Problem:** Denial of service against particular accounts, a side effect of the SEC-001 fix.
+  - The per-email limits (5 codes per 15 minutes, 10 guesses per hour) are counted for every request, whoever sends it.
+  - Only the newest code is ever checked (`orderBy(desc(createdAt)).limit(1)`), so each new code makes the one already in the member's inbox useless.
+- **Evidence:**
+  - Five `signInStep` posts with a member's email, from anywhere, make that member's own requests return "Too many sign-in codes have been requested" for the rest of the window.
+  - Ten wrong-code posts make their correct code return "Too many attempts" for the hour.
+  - The per-address limits (100 codes and 300 guesses per 15 minutes) let one address do this to about 20 members per window; several addresses can do it to the whole roster on an event morning.
+  - Existing sessions are not affected.
 - **Fix:**
-  - Parse the URL and require `u.hostname ∈ {127.0.0.1, localhost}`, `u.username === "" && u.password === ""`, and protocol `http:`.
-  - In `uat.sh`, require `UAT_PORT` and `UAT_PGPORT` to be integers.
-  - Have the guard refuse environment assignments before `scripts/uat.sh`; the runner already sets the ports.
-- **Verify:** `UAT_PORT=@example.com scripts/uat.sh sandbox` exits with an error before Playwright starts, and `review-guard-test.py` has a case that refuses the env-prefixed form.
+  - Key the guess limit on `(email, address)`, and keep a higher per-email ceiling (for example 30 an hour) that alerts administrators when it is reached.
+  - Accept any unexpired, unused code for the address (the last 3, say) instead of only the newest.
+  - Do not count a code request against the email when the request is itself limited by address.
+- **Verify:**
+  - After 10 wrong guesses from address A, a correct code entered from address B still signs in.
+  - A code request from an attacker does not stop the member's earlier code from working.
 
 ## Informational
 
 ### SEC-012 — Demo mode: what must be true before turning it off
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Live risk:** live-now
-- **Where:** `src/server/auth.ts:20`, `src/app/login/actions.ts:32-39`, `src/server/auth.ts:93`, `src/server/auth.ts:153`, `src/app/(app)/actions.ts:10-26`
+- **Where:** `src/server/auth.ts:21`, `src/app/login/actions.ts:39-46`, `src/server/auth.ts:134`, `src/server/auth.ts:212`, `src/app/(app)/actions.ts:10-26`
 - **Problem:** Demo mode is a deliberate choice. While it is on:
-  - Anyone can sign in as any user. `demoSignIn` accepts any email, not just the listed sample accounts.
+  - Anyone can sign in as any user: `demoSignIn` accepts any email address, not just the listed sample accounts.
   - Sign-in codes are shown on screen for any member address.
-  - Each caller can move their own clock with `td_clock`, which also changes which event their Server Actions act on.
+  - Each caller can shift their own clock with `td_clock`, which also changes which event their Server Actions act on.
 
-  The code correctly turns sample sign-in, on-screen codes and the clock off when `DEMO_MODE` is unset. These things survive switching it off:
-  1. Every session created by a demo sign-in stays valid for up to 30 days (`SESSION_DAYS`), including sessions as the demo administrators, if the same database is kept.
+  When `DEMO_MODE` is unset, the code correctly turns off sample sign-in (`demoSignIn` throws), on-screen codes and the clock (the offset is forced to 0). These things survive turning it off:
+  1. Every session created by a demo sign-in stays valid for up to 30 days, including sessions as the demo administrators, if the same database is kept. `getSessionUser` checks only `expiresAt`.
   2. The seeded demo people, including two administrators, remain members.
-  3. SEC-004's on-screen shop link does not depend on demo mode.
-  4. `.env.example` still sets `DEMO_MODE=1` (SEC-008).
-- **Evidence:** `getSessionUser` checks only `expiresAt`, not how the session was created. The live database "is loaded with the demo data" (README).
+  3. `message_log` already holds every sign-in code issued during the demo in its subject column (SEC-013), and those rows stay readable from the delivery log.
+  4. SEC-004's on-screen shop link does not depend on demo mode.
+  5. `.env.example` still sets `DEMO_MODE=1` (SEC-008).
+- **Evidence:** The live database "is loaded with the demo data" (README). `clearDemoClock` needs no sign-in, but it only deletes the caller's own cookie, which is harmless.
 - **Fix:** Before real data:
-  - Start from a fresh database, or delete every demo user and run `DELETE FROM sessions`.
-  - Connect email and check that `issueSignInCode` returns no `devCode`.
-  - Fix SEC-001, SEC-003, SEC-004 and SEC-005.
-  - Unset `DEMO_MODE` in Production and Preview, then redeploy.
-  - Consider limiting `demoSignIn` to `DEMO_PERSONAS` emails, so that even demo mode cannot open a real account.
+  - Start from a fresh database, or delete every demo user and run `DELETE FROM sessions; DELETE FROM message_log;`.
+  - Connect email, and check that `issueSignInCode` returns no `devCode`.
+  - Set `APP_URL`.
+  - Fix SEC-013, SEC-003, SEC-004 and SEC-005.
+  - Unset `DEMO_MODE` in both Production and Preview, then redeploy.
+  - Consider limiting `demoSignIn` to the `DEMO_PERSONAS` addresses, so that even demo mode cannot open a real account.
 
 ## Accepted risks
 None.
 
 ## Resolved since last run
-First run; nothing to compare against.
+- **SEC-001 — Make sign-in code attempts atomic and add per-address and per-account limits** — resolved:
+  - Each guess is now counted in one conditional `UPDATE … attempts + 1 WHERE attempts < 5 … RETURNING`.
+  - Using up a code requires `consumed_at IS NULL`, and the hash is compared with `timingSafeEqual`.
+  - A new `rate_limits` table (`src/server/rate-limit.ts`, `drizzle/0002_review_fixes.sql`) limits codes and guesses per email and per network address.
+  - Non-members get the same database work, and the email is sent in `after()`.
+  - The lock-out side effect is tracked separately as SEC-014.
+- **SEC-011 — Stop the writing acceptance tests from being pointed at the live site** — resolved:
+  - `uat/tests/local.ts` parses the URL and requires `http:`, host `127.0.0.1` or `localhost`, and no username or password.
+  - `scripts/uat.sh:50` rejects non-numeric `UAT_PORT` and `UAT_PGPORT`.
+  - `scripts/review-guard.py:97` refuses `UAT_*`, `DATABASE_URL` and `PLAYWRIGHT_*` assignments in front of the harness.
+  - `scripts/review-guard-test.py:47-49` covers the earlier bypass.
 
 ## Coverage notes
-- **`npm audit`** (`checks/npm-audit.json`, `checks/npm-audit.err` empty): 4 vulnerabilities, all high, 0 critical, 0 moderate, 0 low. They form one transitive chain under `@vercel/blob`, covered in SEC-010. 92 production dependencies.
-- **Read in full:** every Server Action and route handler, `src/proxy.ts`, `src/server/*`, `src/db/index.ts`, configuration and ignore files, `public/sw.js`, the review tooling (`scripts/review-guard.py`, `review-run.sh`, `review-save.py`, `uat.sh`, `uat/tests/guard.ts`, `uat/tests/sandbox/fixtures.ts`, `uat/playwright.config.ts`) and `.claude/settings.json`.
-- **Not read line by line:** pages and components were checked by searching for authorization calls, `href`/`src` sinks, data URLs and client-component props, not read top to bottom. The large UAT spec files, `src/db/seed.ts` (checked only for real-looking addresses; it holds PCA national role addresses at `@pca.org` and `.example` shop addresses), `src/lib/*` and the Drizzle snapshot JSON files were also not read in full.
+- **`npm audit`** (`checks/npm-audit.json` present; `checks/npm-audit.err` empty): 4 vulnerabilities, all high (0 critical, 0 moderate, 0 low). They form one transitive chain under `@vercel/blob` (SEC-010). 92 production dependencies.
+- **Read in full:**
+  - Trust boundaries: `src/proxy.ts`, `src/server/auth.ts`, `src/server/rate-limit.ts`, `src/app/login/*`.
+  - Route handlers: `/api/cron/reminders`, `/api/files/[...path]`, `/api/live`, `/api/push/subscribe`, `/admin/roster/export`, `manifest.ts`.
+  - The public shop flow: `src/app/tech/[token]/*`.
+  - Every `actions.ts` under `src/app/(app)`.
+  - Server helpers: `src/server/{tech,storage,util,notify,reminders,admin,queries,profile,instruction,pairings,incidents}.ts`, the first part of `waivers.ts` and `clearance.ts`, `src/db/index.ts`, `src/instrumentation.ts`.
+  - Pages and components: the instructor pages, the data loading of the administrator driver, waiver-person and tech-detail pages, the delivery-log page, `live-sync.tsx`.
+  - Configuration: `next.config.ts`, `vercel.json`, `drizzle.config.ts`, `package.json`, `.env.example`, `.gitignore`, `.vercelignore`, `public/sw.js`, the `drizzle/*.sql` migrations.
+  - Tooling: `scripts/db-*.ts`, `scripts/agent-ledger.ts`, `scripts/review-guard.py` (identical to `.claude/hooks/review-guard.py`), `review-guard-test.py`, `review-run.sh`, `review-save.py`, `uat.sh`, `uat/playwright.config.ts`, `uat/tests/{local,guard}.ts` (first part), `uat/tests/sandbox/fixtures.ts`, `.claude/settings.json`.
+- **Checked by search, not read line by line:**
+  - The other pages and presentational components: every one of the 19 administrator pages calls `requireAdmin` or checks `v.isAdmin`.
+  - Sinks: `href`/`src`, `dangerouslySetInnerHTML` (none), `sql` templates (only constant increments), `eval`/`new RegExp`/`JSON.parse` (none in `src`).
+  - `src/server/roster-import.ts` and `src/lib/*`.
+  - `src/db/seed.ts`, checked only for real-looking addresses: every address is at `example.com`, a `.example` domain or `pca.org` (national role addresses). Nothing real was found.
+- **Not read:** the large UAT spec files, the Drizzle snapshot JSON files, `scripts/review/*.ts`, `uat/dev-sandbox.sh`, `uat/db-fingerprint.sh`, and `.claude/agents/security-reviewer.md` (this agent's own instructions).
 - **Checked and found sound:**
+  - Session tokens are 256-bit random, stored as a SHA-256 hash, sent in an HttpOnly, SameSite=Lax, Secure cookie, and deleted at sign-out.
   - The `next` parameter is never used after sign-in, so there is no open redirect.
-  - `td_event` is honoured only for administrators and only within their region.
-  - Sessions use a random 256-bit token, hashed at rest, in an HttpOnly, SameSite=Lax, Secure cookie, deleted at sign-out.
-  - The shop token is 192-bit, hashed, lasts 21 days and is single-use.
-  - `/api/files` blocks path traversal and checks owner or admin.
-  - Instructor actions check the pairing.
-  - The driver profile never selects `privateNotes`, and admin-only pages all call `requireAdmin`.
-  - Signatures and sketches are rendered only through `<img src>` (sketches must be PNG).
+  - `td_event` is honoured only for administrators, and only within their region. `td_clock` is ignored outside demo mode.
+  - The shop token is 192-bit and hashed, lasts 21 days, and cannot sign again once used. The page shows the driver's name, car, event and region only.
+  - `/api/files` blocks path traversal and checks owner or administrator.
+  - Instructor actions check the pairing, and private notes are filtered on the server.
+  - The driver profile never selects `privateNotes`.
+  - Signatures and sketches are rendered only through `<img src>`, and sketches must be PNG.
   - The CSV export neutralises `= + - @` and builds its file name from a slug.
-  - Messages go through JSON or form-encoded APIs, so there is no header injection.
-  - The proxy's extension and `icon` matcher exclusions bypass only the optimistic gate; every handler checks again.
+  - Email and SMS are sent as JSON or form-encoded bodies, so there is no header injection.
+  - The proxy's matcher exclusions (`tracks/`, `sw.js`, `icon`, file extensions) only skip the optimistic gate; every handler checks again.
 - **Not reported:**
-  - Cross-site POST to `/api/push/subscribe` is blocked by SameSite=Lax. Only a same-site subdomain could abuse it.
-  - The `APP_URL` fallback to the `Host` header in `publicOrigin` is not exploitable cross-site.
+  - `clientIp` trusts the first `X-Forwarded-For` value. That is correct on Vercel, which sets the header itself, but can be spoofed behind any other proxy.
+  - `publicOrigin` falls back to `X-Forwarded-Host` when `APP_URL` is unset, so set `APP_URL` in production.
+  - An administrator-set `registrationUrl` is rendered as a link to every driver. It is administrator input, and React 19 blocks `javascript:` URLs; I did not verify this against the installed version.
+  - `submitShopInspection` and `decidePromotion` check state and then update without a condition, which is a small race with no security impact found.
   - The 8 MB Server Action body limit is a minor denial-of-service concern.
+- **Review tooling:**
+  - `docs/agent-reports/` is tracked by git (pushed to the private GitHub repository) and excluded from Vercel uploads by `.vercelignore`.
+  - No `/admin/app-tests` route exists in `src`, so the app does not serve the reports. If that route is ever built, it must be administrator-only, because this report is a map of weaknesses.
+  - I did not verify whether `sandbox_env`'s empty variables (for example `RESEND_API_KEY=`) take precedence over a developer's `.env.local` when `next start` runs in the UAT sandbox.
 - **Limits:**
-  - No previous report existed.
-  - I ran nothing and sent no requests, so findings come from reading the code only.
-  - Drizzle's error-message format (SEC-007) is inferred from the library version, not observed.
-  - The review guard refused some of my read-only commands (for example, a path containing `..` within the snapshot, and a combined `cat` that it took for a deploy command). I re-ran those reads with the Read and Grep tools, so coverage was not affected.
-  - The guard is a deny-list. Its Bash checks do not resolve symlinks, and it relies on the macOS sandbox for real confinement, as its own docstring says.
+  - I ran nothing and sent no requests; findings come from reading the code only.
+  - The guard refused two of my read-only commands: a `cat` that included `vercel.json`, taken for a deploy command, and a loop using command substitution. I re-did both with the Read and Grep tools, so coverage was not affected.
+  - The guard is a deny-list and depends on the macOS sandbox for real confinement, as its own docstring says.

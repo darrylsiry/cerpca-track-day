@@ -4,181 +4,200 @@
 to consider, not a to-do list. Do not edit by hand except to change a finding's status to `Declined`
 with a reason. Coding agents: build only what a human has chosen and cite the `UX-NNN` ID.*
 
-- **Run:** 2026-11-16 13:31
-- **Code version:** `364c8c5f`
-- **Previous run:** none
+- **Run:** 2026-11-19 18:27
+- **Code version:** `898fdf3c`
+- **Previous run:** 2026-11-16 13:31
 - **Reviewed against:** screenshots of the demo data and source
 
 ## Summary
 
 | Priority | Open | New this run | Improved | Resolved this run |
 |----------|------|--------------|----------|-------------------|
-| P1 Blocker | 2 | 2 | 0 | 0 |
-| P2 Major | 6 | 6 | 0 | 0 |
-| P3 Minor | 8 | 8 | 0 | 0 |
-| P4 Polish | 4 | 4 | 0 | 0 |
+| P1 Blocker | 0 | 0 | 0 | 2 |
+| P2 Major | 9 | 3 | 1 | 0 |
+| P3 Minor | 8 | 0 | 0 | 0 |
+| P4 Polish | 5 | 1 | 0 | 0 |
 
-At the track, the app is clear and calm. The pit-board Now screen, the run-group "wristband" colours, the turn-by-turn guide and the long forms (shop form, incident report) are better than most club software. The weak point is the brief's first rule: a driver must never miss a schedule change. On a phone, urgent announcements and schedule changes sit below the driver's whole day list. A cancelled session just disappears from "Your day" without a word. The only other sign that anything changed is a toast that lasts 3 seconds. Moving urgent alerts and changes to the top of the Now screen (UX-001) is the single most valuable change. The best quick win is UX-003: add `"sms"` to the two schedule-change sends, so drivers who chose text alerts actually get texted when their session is delayed or cancelled.
+Both blockers from the last run are fixed.
+- **Now screen:** a driver at the track now sees unread urgent alerts first, in yellow with "Got it". A cancelled session is struck through and named ("Your 10:10 AM Green session is cancelled."), and a moved one says "moved from 10:10 AM".
+- **Grid tech:** "cleared" now means the same thing at grid tech as on the driver's own screen.
+
+The biggest remaining risk is a screen that looks live when it isn't. In a paddock with no signal, the Now screen keeps counting down from an old schedule and gives no sign that it has stopped updating. Saying so (UX-022) is the most valuable change: it is the last way a driver can still miss a schedule change.
+
+The best quick win is still UX-003: add `"sms"` to the two schedule-change sends, so drivers who chose text alerts are texted when their session is cancelled or delayed.
 
 ## Outstanding items
 
 | ID | Priority | Effort | Status | Screen | Recommendation (one line) | First seen |
 |----|----------|--------|--------|--------|----------------------------|------------|
-| UX-001 | P1 | M | New | Now (phone) | Put urgent alerts and "your session changed" at the top of Now; keep cancelled sessions visible, struck through | 2026-11-16 |
-| UX-002 | P1 | S | New | Grid tech, sticker alert | Use "cleared" only when waivers are signed and a sticker is issued; show waiver status at grid tech | 2026-11-16 |
-| UX-003 | P2 | S | New | Schedule-change alerts | Send delays and cancellations by text as well as in-app and push | 2026-11-16 |
-| UX-004 | P2 | M | New | Admin roster check-in | Show what is still missing at check-in; make undo a deliberate action | 2026-11-16 |
-| UX-005 | P2 | S | New | Grid tech list | Default the list to "Not stickered" with a count; label pills by what is missing | 2026-11-16 |
-| UX-006 | P2 | M | New | Admin schedule editor | Tell the admin who was alerted after a cancel, edit or delay, and preview what will move | 2026-11-16 |
-| UX-007 | P2 | S | New | Alerts (phone) | Put the alerts first; drop the push card to the bottom when push is unavailable | 2026-11-16 |
-| UX-008 | P2 | M | New | Now, Tech, Track guide | Explain the event words (false grid, tech shed, point-by) and link places to the map | 2026-11-16 |
-| UX-009 | P3 | S | New | Now, Profile, Tech, Roster | Use one name and one label for each tech state | 2026-11-16 |
-| UX-010 | P3 | S | New | Admin sidebar | Put "Run the event" first for administrators | 2026-11-16 |
-| UX-011 | P3 | S | New | My students (phone), reminders | Show full student names, sort cards by next session, name the student in reminders | 2026-11-16 |
-| UX-012 | P3 | S | New | Instructor pairing | Make the instructor dropdown show the true load; avoid an alert on every arrow key | 2026-11-16 |
-| UX-013 | P3 | S | New | Tech approval alert | Email the driver when their tech form is approved | 2026-11-16 |
-| UX-014 | P3 | S | New | Now (event day) | Show the driver whether they are checked in | 2026-11-16 |
-| UX-015 | P3 | S | New | Waiver signed | After the last waiver, point to the tech inspection | 2026-11-16 |
-| UX-016 | P3 | M | New | Events, edit | Check for open items before marking an event completed | 2026-11-16 |
-| UX-017 | P4 | S | New | Admin schedule editor | Rename row "Cancel" to "Cancel session" | 2026-11-16 |
-| UX-018 | P4 | S | New | Several forms and tables | State the sort order and the length and optional rules | 2026-11-16 |
-| UX-019 | P4 | S | New | My students, small buttons | Raise 36px tap targets to 44px on phone screens | 2026-11-16 |
-| UX-020 | P4 | S | New | Now "Before you drive" banner | Give each to-do in the banner its own link | 2026-11-16 |
+| UX-003 | P2 | S | Open | Schedule-change alerts | Send delays and cancellations by text as well as in-app and push | 2026-11-16 |
+| UX-004 | P2 | M | Open | Admin roster check-in | Show what is still missing at check-in; make undo a deliberate action | 2026-11-16 |
+| UX-005 | P2 | S | Open | Grid tech list | Default the list to "Still to sticker" with a count; label pills by what is missing | 2026-11-16 |
+| UX-006 | P2 | M | Improved | Admin schedule editor | Say who was alerted after a cancel or delay, and preview what a delay moves | 2026-11-16 |
+| UX-007 | P2 | S | Open | Alerts (phone) | Put the alerts first; move the push card down when push can't be turned on | 2026-11-16 |
+| UX-008 | P2 | M | Open | Now, Tech, Track guide | Explain false grid, tech shed, grid tech and point-by where they first appear | 2026-11-16 |
+| UX-021 | P2 | S | New | Emails and texts | Put the event name and a link to the right screen in every email and text | 2026-11-19 |
+| UX-022 | P2 | S | New | Now, Schedule (phone) | Show "No connection · schedule as of 10:02 AM" when live updates stop | 2026-11-19 |
+| UX-023 | P2 | S | New | Every sheet form (debrief, send-back note) | Don't throw away typed text when a sheet is closed by a stray tap or Escape | 2026-11-19 |
+| UX-009 | P3 | S | Open | Now, Profile, Tech, Roster | Use one name and one driver-facing label for each tech state | 2026-11-16 |
+| UX-010 | P3 | S | Open | Admin sidebar | Put "Run the event" first for administrators; count incidents in the More badge | 2026-11-16 |
+| UX-011 | P3 | S | Open | My students (phone), reminders | Show full student names, sort by next session, name the student in reminders | 2026-11-16 |
+| UX-012 | P3 | S | Open | Instructor pairing | Make the dropdown show the true load; don't pair on every arrow key | 2026-11-16 |
+| UX-013 | P3 | S | Open | Tech approval alert | Email the driver when their tech form is approved | 2026-11-16 |
+| UX-014 | P3 | S | Open | Now (event day) | Show the driver whether they are checked in | 2026-11-16 |
+| UX-015 | P3 | S | Open | Waiver signed | After the last waiver, point to the tech inspection | 2026-11-16 |
+| UX-016 | P3 | M | Open | Events, edit | Check for open items before an event is marked completed | 2026-11-16 |
+| UX-017 | P4 | S | Open | Admin schedule editor | Rename the row's "Cancel" to "Cancel session" | 2026-11-16 |
+| UX-018 | P4 | S | Open | Several forms and tables | State the sort order and the length and optional rules | 2026-11-16 |
+| UX-019 | P4 | S | Open | My students, small buttons | Raise 36px tap targets to 44px on phone screens | 2026-11-16 |
+| UX-020 | P4 | S | Open | Now "Before you drive" banner | Give each to-do in the banner its own link | 2026-11-16 |
+| UX-024 | P4 | S | New | Now "Your next" | Reword "Time changed: moved from 10:10 AM" to "Moved from 10:10 AM" | 2026-11-19 |
 
 ## P1 Blocker
 
-### UX-001 — Put schedule changes and urgent alerts at the top of the Now screen
-- **Status:** New
-- **Effort:** M
-- **Who / when:** Driver at the track, between sessions, glancing at the phone with the app open; also a first-time Green driver who never opens Alerts.
-- **Where:**
-  - `src/app/(app)/home/page.tsx:220`: the Announcements card is in the right-hand column, which on a phone stacks below the whole `NowPanel`.
-  - `src/lib/schedule.ts:40`: `relevance()` returns `null` for cancelled items, so `myDay()` drops them.
-  - `src/components/shell/live-sync.tsx:34`: the only change signal is the 3.2-second toast "The schedule was updated".
-  - `src/app/(app)/admin/announcements/composer.tsx:189`: promises urgent posts are "Highlighted in yellow at the top of everyone's Now screen".
-  - Screen: `/home`.
-- **What the user experiences:**
-  - In `driver-home-phone.jpg` the urgent "Oil-dry at Turn 5 exit" sits under all nine "Your Saturday" rows, about 1.5 screens down. The administrator was told it would be at the top.
-  - If the 10:10 Green session is cancelled, the driver's "Your next" quietly becomes the 1:00 PM session and the 10:10 row is gone from "Your Saturday". Nothing on Now says it was cancelled.
-  - After "Delay or advance", every time is already shifted, with no "+15 min" anywhere. A driver who memorised "10:10" sees "10:25" and cannot tell whether they misread it or it moved.
-  - The toast is gone in 3 seconds, often before the phone is out of the pocket.
-- **Why it matters:** The brief's first rule for drivers is "never miss a schedule change". Today the Now screen is always correct but never says that it changed. A driver who trusts habit or memory over the screen heads to the grid at the wrong time, or waits for a session that is not running.
-- **Recommendation:**
-  1. On Now, directly under the "Before you drive" banner and above the board, render unread urgent notifications for this event (kind `announcement` with `urgent`, including the ones `announceChange` creates) as a yellow strip.
-     - Use the alert's title and the first line of its body, plus a "Got it" button that calls `markRead`.
-     - Keep the strip until it is read.
-  2. In `myDay()`, keep cancelled items that are relevant to this driver: work out `relevance` while ignoring `cancelled`, then flag them.
-     - Show them in "Your day" struck through, with a red "Cancelled" pill, matching the Schedule page.
-     - "Your next" must skip them but say so: "Your 10:10 Green session is cancelled. Next: Green at 1:00 PM."
-  3. Give schedule items an "original start" (or record the last shift on the event).
-     - When an item has moved, show "Moved from 10:10" under the time in "Your next" and in "Your day" rows.
-  4. Change the composer copy only if (1) is not built: "Urgent. Shown with a yellow bar in Alerts and Announcements." Otherwise keep it, because it becomes true.
-- **Before / after:**
-  ```
-  BEFORE (phone, top)                 AFTER (phone, top)
-  ┌ NEXT UP AT THE TRACK ┐            ┌▌URGENT · 2 min ago            ┐◀
-  │ GREEN   10:25        │            │▌Schedule running 15 min later  │◀
-  └──────────────────────┘            │▌Track drying after the shower  │◀
-  YOU · YOUR NEXT                     │▌                     [Got it]  │◀
-   GREEN 10:25–10:45 · False grid     └────────────────────────────────┘
-  YOUR SATURDAY                       YOU · YOUR NEXT
-   10:25 Green                         GREEN 10:25–10:45  moved from 10:10◀
-   1:00  Green                        YOUR SATURDAY
-   ...(9 rows)                         10:25 Green   moved from 10:10   ◀
-  ANNOUNCEMENTS  ← urgent is here      1:00  Green
-                                       ~~2:45 Green~~  CANCELLED        ◀
-  ```
-  Mockup: `UX-001.html`
-- **Verify:**
-  - Set the demo clock to Sat 9:58, delay the day by 15 minutes and cancel a Green session.
-  - On a 375px phone as the Green driver, the yellow strip is the first thing on Now.
-  - "Your next" says "moved from …", and the cancelled row is struck through, not missing.
-
-### UX-002 — Use one meaning of "cleared": waivers signed and sticker issued
-- **Status:** New
-- **Effort:** S
-- **Who / when:** Chief tech inspector at the grid issuing stickers; the driver who receives the sticker alert; the administrator looking at the roster.
-- **Where:**
-  - `src/app/(app)/admin/tech/grid/page.tsx:152`: green banner "Cleared to go on track", based only on the sticker.
-  - `src/app/(app)/admin/tech/actions.ts` (`saveGridTech`, issue branch): no waiver check, auto check-in, and the alert body "Your car passed grid tech and is cleared to go on track."
-  - `src/app/(app)/home/page.tsx`: by contrast, `cleared` requires waivers, approval and a sticker.
-  - Screen: `/admin/tech/grid?u=…`.
-- **What the user experiences:**
-  - Tessa Nakamura (2/3 waivers in the roster) can be stickered once her form is approved.
-  - The inspector then sees a big green "CLEARED TO GO ON TRACK" panel, Tessa gets an alert saying she "is cleared to go on track", and she is checked in automatically.
-  - Her own Now screen meanwhile shows no "Cleared to drive" pill, because a waiver is missing.
-  - Nothing on the grid tech screen shows waivers at all.
-- **Why it matters:** PCA's insurance depends on every driver having a signed waiver (the app's own waiver page says so). The screen most likely to be the last check before a car goes out tells the inspector and the driver the opposite of the truth.
-- **Recommendation:**
-  - On the grid tech detail, add a waivers row beside the paperwork notice:
-    - "Waivers: 3 of 3 signed ✓", or
-    - "Waivers: 2 of 3 signed. Send them to registration before the sticker goes on." with an "Open their waivers" link.
-  - Keep the sticker issuable (tech and registration are separate desks). Change the success panel and alert to depend on both:
-    - Sticker and all waivers: "Cleared to go on track".
-    - Sticker but waivers missing: panel in warn colour, "Sticker F26-034 issued · not cleared: 1 waiver unsigned".
-    - The alert to the driver then reads: "Tech sticker F26-034 issued. You still need to sign 1 waiver before you can drive. Open Waivers."
-  - In the grid list, show a "Waivers" pill for these cars (see UX-005).
-- **Before / after:**
-  ```
-  BEFORE                               AFTER
-  ┌ 402 Tessa Nakamura   GREEN ┐       ┌ 402 Tessa Nakamura   GREEN ┐
-  └────────────────────────────┘       │ Waivers 2 of 3  ⚠ Open     │◀
-  ┌▓ CLEARED TO GO ON TRACK   ▓┐       └────────────────────────────┘
-  │▓ F26-034                  ▓│       ┌░ STICKER ISSUED · NOT CLEARED┐◀
-  │▓ Sticker issued 7:40 AM   ▓│       │░ F26-034                     │
-  └────────────────────────────┘       │░ 1 waiver unsigned: send to  │◀
-                                       │░ registration before driving │◀
-                                       └──────────────────────────────┘
-  ```
-  Mockup: `UX-002.html`
-- **Verify:**
-  - Sticker a driver with an unsigned waiver. The panel is amber and does not say "Cleared".
-  - The driver's alert names the missing waiver.
-  - Signing the waiver turns the panel green and shows "Cleared to drive" on their Now screen.
+None.
 
 ## P2 Major
 
-### UX-003 — Text drivers when their session is delayed or cancelled
+### UX-022 — Say when the screen has stopped updating
 - **Status:** New
 - **Effort:** S
-- **Who / when:** Driver at the track with the app closed, who chose "Text message" in Profile.
+- **Who / when:** Driver at the track, in a corner of the paddock with one bar of signal, glancing at Now between sessions.
 - **Where:**
-  - `src/app/(app)/admin/schedule/actions.ts:60` and `:75`: `announceChange` uses `channels: ["inapp", "push"]`.
-  - `src/server/reminders.ts:136`: session reminders do use `sms`.
-  - `src/app/(app)/me/profile-forms.tsx:149`: the profile promises texts for "Urgent announcements and session reminders".
-- **What the user experiences:** The driver gets a text 15 minutes before a session. When that session is cancelled, they get no text, even though the cancellation alert is marked urgent. Push is often unavailable: on iPhone it only works after "Add to Home Screen", and the Alerts screenshot shows "Not set up on this server". So the driver walks to the false grid for a session that is not running.
-- **Why it matters:** Text is the one channel that reliably reaches a phone in a pocket in the paddock. The profile tells drivers they will get urgent messages that way, and the most urgent message does not come.
+  - `src/components/shell/live-sync.tsx:39`: a failed poll is ignored (`/* offline: try again on the next tick */`), and the app keeps no time of its last good update.
+  - `src/app/(app)/home/now-panel.tsx:31`: `useTrackNow()` keeps ticking the countdowns from the device clock.
+  - Screens: `/home`, `/schedule`.
+- **What the user experiences:**
+  - With no signal, the board still reads "ON TRACK NOW · GREEN · 4:12 left in session", and "Your next" counts down to "10:10".
+  - Meanwhile the chair has delayed the day 15 minutes and cancelled that Green session.
+  - The yellow urgent strip and the "is cancelled" line built for UX-001 only appear once a poll gets through.
+  - Nothing on screen says the information might be old. A ticking countdown actually makes it look more live.
+- **Why it matters:** "A schedule that looks current and is stale" is the exact wrong decision this app exists to prevent. Paddock signal is often poor, so this is not a rare case. One line of text is enough for the driver to check the board at the tower or ask someone.
 - **Recommendation:**
-  - Change both `announceChange` sends to `["inapp", "push", "sms"]`. `notifyUsers` already respects each person's `notifySms`.
-  - Keep the bodies short for SMS. For example: "Cancelled: Green, 10:10 AM. Saturday's 10:10 AM Green session will not run." The current wording already works.
-  - In the Schedule editor's "Delay or advance" sheet, change "Announce the change to everyone" to "Alert everyone (in the app, push and text)".
+  1. In `LiveSync`, record `lastOk` (the time of the last successful `/api/live` answer). Share it, together with `navigator.onLine`, through a small context.
+  2. When `lastOk` is more than 60 seconds old, or the browser reports offline, show a full-width strip at the very top of the content on every screen (above the urgent alerts on Now). Use dark ink on the warning-soft background, 15px bold:
+     - "No connection · schedule as of 10:02 AM. Times may have changed: check the board at the tower."
+  3. While the strip shows, change "to go" under the "Your next" countdown to "to go, if on time".
+  4. When a poll succeeds again, remove the strip. If the schedule changed in the meantime, show the existing toast.
+- **Before / after:**
+  ```
+  BEFORE (no signal)                  AFTER (no signal)
+  ┌ ON TRACK NOW        10:10–10:30 ┐ ┌░ No connection · schedule as of ░┐◀
+  │ GREEN               04:12 left  │ │░ 10:02 AM. Times may have       ░│◀
+  └─────────────────────────────────┘ │░ changed: check the tower board.░│◀
+  YOU · HEAD TO THE GRID              └─────────────────────────────────┘
+   GREEN 10:10–10:30     08:41 to go  ┌ ON TRACK NOW ... (unchanged)     ┐
+                                       YOU · HEAD TO THE GRID
+                                        GREEN 10:10   08:41 to go, if on time◀
+  ```
+  Mockup: `UX-022.html`
+- **Verify:** Load Now, then turn on airplane mode. Within about a minute the strip appears with the time of the last update. Turn airplane mode off, and the strip goes away on the next poll.
+
+### UX-021 — Give every email and text the event name and a link to act on
+- **Status:** New
+- **Effort:** S
+- **Who / when:**
+  - A first-time driver at home reading "Your tech form needs changes" in their inbox.
+  - A driver reading a session-reminder text with the app closed.
+- **Where:**
+  - `src/server/notify.ts:209`: an email is sent as `subject: input.title, text: input.body`; `input.href` is dropped.
+  - `src/server/notify.ts:214`: a text is `${title}: ${body}` cut to 300 characters, with no link.
+  - Callers: `admin/tech/actions.ts:103` (the body is only the reviewer's note) and `:164` ("Tech inspection: action needed"). The email to the shop (`me/tech/actions.ts:163`) already does it right.
+- **What the user experiences:**
+  - The "needs changes" email reads, in full: subject "Your tech form needs changes", body "Brake pad thickness not recorded for the rear axle."
+  - It names no event, no club and no app, and has no link. A nervous first-timer has to know that "Track Day" is a website, find it and sign in, then find the form.
+  - A reminder text reads "Green: on track in 15 min: You go out at 10:10 AM. Get your car to the grid." It is fine on event day, but there is no way to tap through to the schedule, and a long body can be cut off mid-word at 300 characters.
+- **Why it matters:** Email and text are the only messages that reach someone who doesn't have the app open. A message they can act on in one tap gets the form fixed this week instead of at the tech shed on Saturday.
+- **Recommendation:**
+  - In `notifyUsers`, when `href` is set, add a footer to every email:
+    `\n\nOpen it in Track Day: https://cerpca.siryous.app/me/tech\n\n{event name} · {org short name}`.
+    Use the same `publicOrigin()` the shop email uses, and look up the event name from `eventId`.
+  - Prefix the subject with the club: "CERPCA: Your tech form needs changes".
+  - For texts, append the short link: "… Get your car to the grid. https://…/schedule". Cut the body to fit before adding the link, never the link itself.
+  - Rewrite the changes-requested body to start with what to do: "The tech team sent your form back. What to fix: Brake pad thickness not recorded for the rear axle."
+- **Before / after:**
+  ```
+  BEFORE (email)                      AFTER (email)
+  Subject: Your tech form needs       Subject: CERPCA: Your tech form   ◀
+           changes                             needs changes
+  Brake pad thickness not recorded    The tech team sent your form back.◀
+  for the rear axle.                  What to fix: Brake pad thickness
+                                      not recorded for the rear axle.
+                                      Open it in Track Day:             ◀
+                                      https://cerpca.siryous.app/me/tech◀
+                                      Fall Driver Education · CERPCA    ◀
+  ```
+  Mockup: `UX-021.html`
+- **Verify:** Send a form back, and run a reminder with text alerts on. The delivery log shows an email body ending in a working link and the event name, and a text that ends in a link.
+
+### UX-023 — Keep typed notes when a sheet is closed by accident
+- **Status:** New
+- **Effort:** S
+- **Who / when:**
+  - An instructor on a phone typing a debrief in "Log a session" between sessions.
+  - Also: a tech reviewer writing a "Send the form back" note, the Chief Driving Instructor writing a promotion rationale, and a solo driver writing an "Ask for an instructor" note.
+- **Where:**
+  - `src/components/sheet.tsx:65`: a click on the backdrop closes the dialog.
+  - `src/components/sheet.tsx:57`: the content is unmounted once `open` is false.
+  - Escape also closes it, and reopening starts empty.
+  - Used by `instructor/forms.tsx` (log, private note, recommend), `admin/tech/[id]/page.tsx:95`, `admin/promotions/forms.tsx` and `home/ride-along.tsx`.
+- **What the user experiences:** On a phone the sheet rises from the bottom, and the dimmed page shows above it. An instructor who has typed three sentences and picked "Braking" and "Vision" taps that dimmed area to put the keyboard away. The sheet closes, and when they tap "Log a session" again, the notes and focus chips are gone. No warning is given.
+- **Why it matters:** The instructor's job is "a debrief logged in under a minute". Losing it once means it is often not retyped at all, and the student never gets the feedback. The app keeps input carefully everywhere else (`ActionForm`, the shop form), so this is the one gap.
+- **Recommendation:**
+  - In `Sheet`, track whether the form inside has been changed (an `input` listener on the dialog that sets `dirty`).
+  - When it is dirty:
+    - Ignore backdrop clicks.
+    - On Escape or the ✕, ask "Discard your notes for Owen?" with "Keep editing" (the default) and "Discard".
+  - Better still, keep the dialog mounted and closed rather than unmounting it, so reopening shows what was typed until it is saved. `ActionForm` already resets on success.
+- **Before / after:**
+  ```
+  BEFORE                              AFTER
+  (dimmed page — tap closes)          (dimmed page — tap does nothing)  ◀
+  ┌ LOG A SESSION              ✕ ┐    ┌ LOG A SESSION              ✕ ┐
+  │ Notes for Owen               │    │ Notes for Owen               │
+  │ Good eyes up through 4–5,…   │    │ Good eyes up through 4–5,…   │
+  │ [Braking][Vision]            │    │ ✕ → "Discard your notes for  │◀
+  └──────────────────────────────┘    │      Owen?" [Keep editing]   │◀
+  tap above → sheet gone, text lost   └──────────────────────────────┘
+  ```
+  Mockup: inline only
+- **Verify:** Type into "Log a session", then tap above the sheet. It stays open. Press Escape and the discard question appears. Close and reopen after "Keep editing", and the text is still there.
+
+### UX-003 — Text drivers when their session is delayed or cancelled
+- **Status:** Open (first seen 2026-11-16)
+- **Effort:** S
+- **Who / when:** Driver at the track with the app closed, who turned on "Text message" in Profile.
+- **Where:**
+  - `src/app/(app)/admin/schedule/actions.ts:88` and `:103`: `announceChange` still uses `["inapp", "push"]`.
+  - By contrast, `src/server/reminders.ts` uses `["inapp", "push", "sms"]`, and Profile promises texts for "Urgent announcements and session reminders".
+- **What the user experiences:** A text arrives 15 minutes before a session. If that session is cancelled, no text arrives, even though the cancellation is marked urgent. Push is often unavailable: the capture shows "Not set up on this server".
+- **Why it matters:** The most urgent message misses the one channel the driver chose for urgent messages.
+- **Recommendation:**
+  - Use `["inapp", "push", "sms"]` in both places.
+  - In the Delay sheet, change "Announce the change to everyone" to "Alert everyone (in the app, push and text)".
 - **Before / after:**
   ```
   BEFORE  Cancel Green 10:10 → app ✓  push ✓  text ✗
   AFTER   Cancel Green 10:10 → app ✓  push ✓  text ✓            ◀
-          "Cancelled: Green, 10:10 AM. Saturday's 10:10 AM Green
+          "Cancelled: Green, 10:10 AM: Saturday's 10:10 AM Green
            session will not run."
   ```
   Mockup: inline only
-- **Verify:** Cancel a session. The delivery log shows an `sms` row for every driver in that group who has text turned on.
+- **Verify:** Cancel a session. The delivery log has an `sms` row for each driver in that group who has text alerts on.
 
 ### UX-004 — Show what is still missing at check-in, and make undo deliberate
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** M
 - **Who / when:** Administrator at the registration table at 6:45 AM with a queue forming.
-- **Where:** `src/app/(app)/admin/roster/roster-table.tsx:321` (`CheckInButton`) and the `/admin/roster` table.
+- **Where:** `src/app/(app)/admin/roster/roster-table.tsx:322` (`CheckInButton`).
 - **What the user experiences:**
-  - Holly Pruitt's row shows "0/3" waivers and "Not started" tech, yet her "Check in" button looks and acts exactly like everyone else's. One tap checks her in, with nothing saying what she still needs.
-  - For checked-in drivers, the button is a ghost-green "✓ In" that reads as a status label. One tap silently un-checks them (`successMessage={false}`, no confirmation).
-- **Why it matters:** The registration table is where missing paperwork is cheapest to fix: the driver is standing right there. An accidental un-check-in under pressure goes unnoticed and later shows the driver as "not arrived".
+  - Holly Pruitt (Waivers 0/3, tech "Not started") is checked in with one tap, like anyone else, and nothing mentions what she still needs.
+  - For a checked-in driver, the button is a ghost "✓ In" that looks like a label. One tap silently undoes the check-in (`successMessage={false}`, no confirmation).
+  - The new "Not checked in 10" filter chip helps find people, but not with either of these.
+- **Why it matters:** The registration table is where missing paperwork is cheapest to fix, because the driver is standing there. An accidental un-check-in goes unnoticed.
 - **Recommendation:**
-  - When the row still has open paperwork, open a small sheet on "Check in" titled "Check in Holly Pruitt?", listing what is missing with actions:
-    - "Waivers 0 of 3: hand them the tablet" (link to their waiver page).
-    - "Tech: not started. Bring the stamped paper form to tech."
-    - Then two buttons: "Check in anyway" and "Not yet".
-  - For complete rows, keep the one-tap check-in with its toast.
-  - Make the checked-in state a non-button pill ("✓ In 6:50") plus a small "Undo" text button that asks "Undo check-in for Desmond Achebe?"
-  - Add a "Not checked in" count to the page header so the queue is visible.
+  - When a row has open paperwork, "Check in" opens a small sheet: "Check in Holly Pruitt? Waivers 0 of 3 · Tech not started", with buttons "Check in anyway" and "Not yet".
+  - For a checked-in driver, show a non-button pill "✓ In 6:50" plus a small "Undo" button that asks "Undo check-in for Desmond Achebe?"
 - **Before / after:**
   ```
   BEFORE                                         AFTER
@@ -188,28 +207,22 @@ At the track, the app is clear and calm. The pit-board Now screen, the run-group
                                                    [Check in anyway] [Not yet] ◀
   171 Achebe, Desmond 3/3 F26-017   ✓ In         171 Achebe ✓ In 6:50  Undo   ◀
   ```
-  Mockup: `UX-004.html`
-- **Verify:**
-  - Checking in Holly shows what she is missing before it goes through.
-  - Tapping "✓ In" on Desmond does nothing; "Undo" asks for confirmation.
+  Mockup: `UX-004.html` (from the previous run, still accurate)
+- **Verify:** Checking in Holly shows what she is missing first. Tapping "✓ In" does nothing, and "Undo" asks before undoing.
 
 ### UX-005 — Default grid tech to the cars that still need a sticker
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
-- **Who / when:** Chief tech inspector at the grid on a tablet, finding who is not yet cleared.
-- **Where:** `src/app/(app)/admin/tech/grid/grid-client.tsx:68` (`GridList`) and the `/admin/tech/grid` screenshot.
+- **Who / when:** Chief tech inspector at the grid on a tablet.
+- **Where:** `src/app/(app)/admin/tech/grid/grid-client.tsx:69` and `:113`. Screenshot: `admin-admin-tech-grid-u-desktop.jpg`.
 - **What the user experiences:**
-  - The list shows all 42 cars "by number".
-  - The 10 that still need a sticker are scattered among 32 green "✓ F26-0xx" pills, so the inspector scrolls and scans.
-  - "Paperwork" is the only label for very different problems: not started, waiting on the shop, sent back.
-- **Why it matters:** The inspector's real question is "who is left?". Answering it by scanning slows the grid and makes it easy to miss a car.
+  - The list still shows "42 cars, by number". The cars that still need a sticker (Holly 55, Victor 66, Wendell 108, …) are scattered among 32 green "✓ F26-0xx" pills.
+  - Every unapproved car says just "Paperwork", whether the form was never started, is waiting on the shop, or was sent back.
+- **Why it matters:** The inspector's question is "who is left?", and scanning 42 rows to answer it is slow and easy to get wrong.
 - **Recommendation:**
-  - Add a two-way switch above the list: "Still to sticker (10)" | "All cars (42)". Default to "Still to sticker".
-  - Sort the "Still to sticker" list as follows:
-    1. "Ready" (approved, waivers done) first.
-    2. Then paperwork problems.
-    3. Then cars with waivers missing.
-  - Replace the "Paperwork" pill with the specific state: "Not started", "Waiting on shop", "Sent back" and, from UX-002, "Waivers".
+  - Add a switch "Still to sticker (10) | All cars (42)", defaulting to the first.
+  - Sort that list: "Ready" first, then paperwork problems, then cars with waivers missing.
+  - Replace "Paperwork" with the specific state: "Not started", "Waiting on shop", "Sent back", "In review".
 - **Before / after:**
   ```
   BEFORE                          AFTER
@@ -217,268 +230,262 @@ At the track, the app is clear and calm. The pit-board Now screen, the run-group
   42 cars, by number              [Still to sticker 10][All 42]  ◀
    4  Fiona C.   ✓ F26-026         66  Victor Osei     Ready      ◀
    7  Gus L.     ✓ F26-008         173 Frank D.        Ready
-   11 Abigail R. ✓ F26-030         55  Holly Pruitt    Not started◀
-   ... 55 Holly  Paperwork         235 Luis Carvalho   Waiting on shop
+   ... 55 Holly  Paperwork         55  Holly Pruitt    Not started◀
+                                   235 Luis Carvalho   Waiting on shop◀
   ```
-  Mockup: `UX-005.html`
-- **Verify:** Opening grid tech shows exactly the cars without a sticker. Issuing a sticker drops that car from the list.
+  Mockup: `UX-005.html` (from the previous run, still accurate)
+- **Verify:** Opening grid tech lists only the cars without a sticker. Issuing one removes that car from the list.
 
-### UX-006 — Tell the administrator who was alerted, and preview a delay
-- **Status:** New
+### UX-006 — Say who was alerted after a cancel or delay, and preview the delay
+- **Status:** Improved (first seen 2026-11-16)
 - **Effort:** M
-- **Who / when:** Event chair mid-day: weather hold, cancelled session, moved lunch.
+- **Who / when:** Event chair mid-day: a weather hold or a cancelled session.
 - **Where:**
-  - `src/app/(app)/admin/schedule/page.tsx:194`: Cancel uses `successMessage={false}`, so the action's "Cancelled and announced" is never shown.
-  - `src/app/(app)/admin/schedule/actions.ts`: `shiftSchedule` returns "12 items moved 15 minutes later", which says nothing about recipients. `deleteItem` alerts nobody.
-  - `src/app/(app)/admin/schedule/forms.tsx` (`ShiftSheet`): no preview.
-- **What the user experiences:**
-  - After confirming a cancel, the chair sees only the pill change. Whether 8 Green drivers and their instructors were told has to be taken on trust.
-  - "Delay or advance" moves "every item that starts at or after" a time, without listing which items or how many people will be alerted.
-  - "Delete" (whose confirmation does mention using Cancel instead) silently drops a session from drivers' schedules.
-- **Why it matters:** The brief asks that a mid-day change "reach the right people at once" and that the chair "know who was told". Without that feedback the chair re-announces by radio or sends a duplicate.
+  - `src/app/(app)/admin/schedule/page.tsx:200`: Cancel still uses `successMessage={false}`.
+  - `admin/schedule/actions.ts`: `shiftSchedule` returns "12 items moved 15 minutes later", with no count of people.
+  - `forms.tsx` `ShiftSheet`: no preview.
+- **What remains:** Editing an item now reports "Schedule updated, and 8 people alerted", which is good. But a cancel, the most urgent change, shows no confirmation at all. A delay doesn't say how many people were told, or show beforehand which items will move.
 - **Recommendation:**
-  - Show the result in the toast:
-    - "Cancelled Green 10:10 · 8 drivers and 5 instructors alerted".
-    - "Moved 12 items 15 min later (10:10 AM onward) · 42 people alerted".
-    - For an edit: "Saved · 8 people alerted", or "Saved · nobody alerted" when the box was unticked.
-    - Return the count from `announceChange`.
-  - In the Delay sheet, list the first few affected items live ("10:10 Green → 10:25, 10:30 DEX → 10:45 … and 9 more") and the recipient count. Base it on the selected day and time, using the items already on the page.
-  - In the Delete confirmation, add "Nobody is alerted."
+  - Have `announceChange` return its recipient count. Then show:
+    - after a cancel: "Cancelled Green 10:10 · 13 people alerted";
+    - after a delay: "Moved 12 items 15 min later · 42 people alerted".
+  - In the Delay sheet, list the first three items it will move ("10:10 Green → 10:25 … and 9 more"), using the items already on the page.
 - **Before / after:**
   ```
   BEFORE                               AFTER
+  Cancel → (pill changes, no toast)    Cancel → "Cancelled Green 10:10 ·   ◀
+                                                 13 people alerted"
   [Delay or advance]                   Delay or advance the day
-   Day Sat  From 10:00                  Day Sat  From 10:00  By 15 Later
-   By 15    Later                       Moves 12 items:                  ◀
-   ☑ Announce the change to everyone     10:10 Green → 10:25             ◀
-   [Move the schedule]                   10:30 DEX → 10:45 … and 10 more ◀
-  toast: "12 items moved 15 minutes"    ☑ Alert all 42 people            ◀
-                                       toast: "Moved 12 · 42 alerted"    ◀
+   From 10:00  By 15  Later             From 10:00  By 15  Later
+   ☑ Announce the change to everyone    Moves 12 items: 10:10 Green → 10:25◀
+                                        … and 11 more                      ◀
+  toast "12 items moved 15 minutes"    toast "Moved 12 · 42 alerted"       ◀
   ```
   Mockup: inline only
-- **Verify:** Cancel a session and delay the day. Each toast states how many people were alerted, matching the delivery log.
+- **Verify:** After a cancel and after a delay, the toast gives a count that matches the delivery log.
 
 ### UX-007 — On phones, show the alerts before the push setup cards
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
-- **Who / when:** Driver opening Alerts from the red badge between sessions.
-- **Where:** `src/app/(app)/alerts/page.tsx:44`, `:76`, `:94` (`pushFirst` reorders the columns whenever the person has no push subscription). Screen: `driver-alerts-phone.jpg`.
-- **What the user experiences:**
-  - The screen shows the heading, then "Mark all read", then "Notifications on this device: Not set up on this server", then a paragraph about adding to the Home Screen.
-  - The urgent "Oil-dry at Turn 5 exit" only starts under the bottom navigation bar, below the first screenful.
-  - The push card cannot be acted on when push is not configured, or on an iPhone browser, yet it still comes first.
-- **Why it matters:** The badge brought the driver here to read something. Making them scroll past setup text they cannot use costs time between sessions, every time.
+- **Who / when:** Driver opening Alerts from the red badge.
+- **Where:** `src/app/(app)/alerts/page.tsx:44`, `:75`, `:93`. Screenshot: `driver-alerts-phone.jpg`.
+- **What the user experiences:** The first screenful is the heading, "Mark all read", "Notifications on this device · Not set up on this server", and the iPhone Home Screen paragraph. The urgent "Oil-dry at Turn 5 exit" only starts below the first screen.
 - **Recommendation:**
-  - Lead with the push card only when it is actionable: state `off`, or `needs-install` on the first visit.
-  - Otherwise put the list first and the "How alerts reach you" card after it.
-  - When push is off, put a one-line hint above the list instead of the card: "Turn on notifications for this phone ›".
+  - Lead with the push card only when it can actually be turned on (state `off`).
+  - Otherwise put the list first, and above it a single line: "Turn on notifications for this phone ›".
 - **Before / after:**
   ```
   BEFORE (first screen)          AFTER (first screen)
-  ALERTS                         ALERTS
-  2 unread alerts…               2 unread · [Mark all read]
-  [Mark all read]                [All][Announcements][Reminders]
-  ┌ Notifications on this     ┐  ┌▌Oil-dry at Turn 5 exit   ●┐ ◀
-  │ device · Not set up…      │  │▌Absorbent down on driver's │
-  └───────────────────────────┘  │▌left… Urgent · 32 min ago  │
+  ALERTS · [Mark all read]       ALERTS · 2 unread · [Mark all read]
+  ┌ Notifications on this     ┐  [All][Announcements][Reminders]
+  │ device · Not set up…      │  ┌▌Oil-dry at Turn 5 exit   ●┐ ◀
+  └───────────────────────────┘  │▌Absorbent down on driver's │
   ┌ HOW ALERTS REACH YOU      ┐  ├────────────────────────────┤
-  │ Everything is listed…     │  │ Green drivers: track walk ●│
+  │ Everything is listed…     │  │ Green drivers: track walk ●│ ◀
   ```
-  Mockup: `UX-007.html`
+  Mockup: `UX-007.html` (from the previous run, still accurate)
 - **Verify:** On a 375px phone with push unavailable, the first unread alert is visible without scrolling.
 
 ### UX-008 — Explain the event words a first-timer meets, where they meet them
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** M
-- **Who / when:** First-time Green driver at home the week before, and on event morning.
+- **Who / when:** First-time Green driver, at home and on event morning.
 - **Where:**
-  - `src/app/(app)/home/now-panel.tsx`: "· False grid", "Head to the grid".
-  - `src/app/(app)/home/page.tsx`: "Issued at the tech shed", "Meet at the false grid…".
-  - `src/app/(app)/me/tech/page.tsx`: "Grid tech at the track".
-  - `src/app/(app)/track/page.tsx`: "with a point-by".
-  - `src/content/roebling-road.ts`: the glossary covers only driving technique, not event vocabulary. The `places` list already says what the false grid is ("Line up here before your session").
-- **What the user experiences:**
-  - A nervous novice reads "Meet at the false grid ten minutes before each of your sessions", "Get your tech sticker at the tech shed" and "a point-by".
-  - None of these is explained or tappable. The glossary under Track guide → Documents does not contain "grid", "false grid", "tech", "point-by", "run group", "solo" or "HPDE".
-- **Why it matters:** The first-timer needs to know for certain where to be. Today they must ask someone, or guess which part of the paddock is the "false grid".
+  - `home/page.tsx:152` and `:330`: "tech shed".
+  - `home/page.tsx:400`: "false grid".
+  - `me/tech/page.tsx:358`: "Grid tech at the track".
+  - `src/content/roebling-road.ts:161`: "with a point-by".
+  - The glossary (`roebling-road.ts:356`) covers only driving technique. The `places` list (`:408–409`) already says where the tech shed and false grid are.
+- **What the user experiences:** "Meet at the false grid ten minutes before each of your sessions", "Get your tech sticker at the tech shed" and "a point-by" are shown with no explanation and nothing to tap.
 - **Recommendation:**
-  - Add event terms to the glossary, written in the region's voice:
-    - "False grid: where your run group lines up in your cars before going out; beside the tech shed at the head of pit lane."
-    - "Point-by: a hand signal out of the driver's window that lets the car behind pass, on the side you point to."
-    - "Tech shed", "Grid tech", "Run group", "Solo".
-  - Make every location the app shows (`item.location`, the grid place, "tech shed") a link to `/track/maps#<place>`, which shows that place's `where` text.
-  - On the first appearance on Now for a Green driver, add a short gloss under "Your instructor": "False grid: beside the tech shed at the head of pit lane."
+  - Add these to the glossary:
+    - "False grid": beside the tech shed at the head of pit lane; your run group lines up here before going out.
+    - "Point-by": an arm out of the driver's window pointing to the side the car behind may pass on.
+    - Also "Tech shed", "Grid tech", "Run group" and "Solo".
+  - Make the place names on Now and Tech link to `/track/maps#<place>`.
 - **Before / after:**
   ```
   BEFORE                                AFTER
-  GREEN 10:10–10:30 · False grid        GREEN 10:10–10:30 · False grid ⓘ ◀
-                                         (tap) Beside the tech shed at the
-                                         head of pit lane. Line up here  ◀
-  Meet at the false grid ten minutes     ten minutes early.
-  before each of your sessions.
+  Meet at the false grid ten minutes    Meet at the false grid ⓘ ten     ◀
+  before each of your sessions.          minutes before each session.
+                                         (tap) Beside the tech shed, at  ◀
+                                         the head of pit lane.
   ```
   Mockup: inline only
-- **Verify:** Each of "false grid", "tech shed", "point-by" and "grid tech" can be explained within one tap of where it first appears.
+- **Verify:** "False grid", "tech shed", "grid tech" and "point-by" are each explained within one tap of where they first appear.
 
 ## P3 Minor
 
-### UX-009 — Use one name and one label for each tech state
-- **Status:** New
+### UX-009 — Use one name and one driver-facing label for each tech state
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
-- **Who / when:** First-time driver checking whether they are ready; admin reading the roster.
-- **Where:**
-  - `src/lib/tech-form.ts:136`: `submitted: "Ready for review"`.
-  - `src/app/(app)/me/tech/page.tsx:313`: "In review".
-  - `shop_signed: "Shop signed, driver to submit"`, shown to the driver themselves on Now.
-  - `home/page.tsx`: the row title is "Shop inspection", while Profile says "Tech inspection".
-- **What the user experiences:** After submitting, the driver's Now checklist says "Shop inspection: Ready for review", which reads as if *they* must review something. The tech page says "In review" for the same state. The driver is talked about in the third person on their own screen.
-- **Why it matters:** "Do I need to do anything?" should have one unambiguous answer.
-- **Recommendation:**
-  - Use separate label sets for the driver and the administrator.
-  - Driver labels:
-    - none: "Not started"
-    - draft: "Choose a shop"
-    - with_shop: "Waiting on your shop"
-    - shop_signed: "Your turn: sign and submit"
-    - submitted: "With the tech team"
-    - changes_requested: "Needs a fix"
-    - approved: "Approved"
-  - Keep "Ready for review" for admins.
-  - Title the Now row "Tech inspection", as in the sidebar and Profile.
-- **Verify:** The same state reads the same on Now, Profile and Tech for a driver.
+- **Who / when:** First-time driver checking whether they are ready.
+- **Where:** `src/lib/tech-form.ts:131` (`submitted: "Ready for review"`, `shop_signed: "Shop signed, driver to submit"`); `me/tech/page.tsx:328` ("In review"); `home/page.tsx:313`, where the row is titled "Shop inspection" while Profile and the sidebar say "Tech inspection".
+- **What the user experiences:** After submitting, Now says "Shop inspection: Ready for review", which reads as if the driver must review something. The driver is also talked about in the third person on their own screen.
+- **Recommendation:** Give drivers their own labels:
+  - "Not started"
+  - "Choose a shop"
+  - "Waiting on your shop"
+  - "Your turn: sign and submit"
+  - "With the tech team"
+  - "Needs a fix"
+  - "Approved"
+
+  Keep the current labels for admins, and title the Now row "Tech inspection".
+- **Verify:** A driver sees the same words for the same state on Now, Profile and Tech.
 
 ### UX-010 — Put "Run the event" first in the administrator's sidebar
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
-- **Who / when:** Event chair on a 13-inch laptop at the registration table.
-- **Where:** `src/components/shell/nav.tsx` (`sections()`). Screens: `admin-*-desktop.jpg` at 900px tall show the sidebar ending at "Waivers".
-- **What the user experiences:** Promotions, Announcements, Incidents, Events and Settings are below the fold, under the chair's own "Profile and car / Tech inspection / Waivers" and "My students". The Incidents badge can be off-screen. On phones, the More badge leaves out incidents (`moreBadge = tech + promotions`).
-- **Recommendation:**
-  - For admins, order the sections "Event", "Run the event", "Instructing", "You".
-  - Include `badges.incidents` in the More badge.
-- **Verify:** At 1440×900 every admin item, including Incidents, is visible without scrolling the sidebar.
+- **Who / when:** Event chair on a laptop at the registration table.
+- **Where:** `src/components/shell/nav.tsx:48–85` and `:192` (the More badge is `tech + promotions`, without incidents). In `admin-admin-tech-grid-u-desktop.jpg`, the sidebar's first screen ends at "Waivers".
+- **What the user experiences:** At 900px tall, Promotions, Announcements, Incidents (with its badge) and Settings are below the fold, under the chair's own "You" and "Instructing" sections.
+- **Recommendation:** For admins, order the sections Event, Run the event, Instructing, You. Add `badges.incidents` to the More badge.
+- **Verify:** At 1440×900, Incidents and its badge are visible without scrolling.
 
 ### UX-011 — Make the instructor's student list readable and ordered by who is next
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
 - **Who / when:** Instructor on a phone between sessions.
-- **Where:**
-  - `src/app/(app)/instructor/page.tsx`: the name is `truncate` beside the chip and number.
-  - `src/server/reminders.ts:165`: "Your student is on track in 15 min".
-  - Screen: `instructor-instructor-phone.jpg` shows "Owen Gall…", "Simone Bap…", "Wendell P…".
+- **Where:** `src/app/(app)/instructor/page.tsx:111` (`truncate`) and `:91` (unsorted); `src/server/reminders.ts:165`. Screenshot: "Owen Gall…", "Simone Bap…", "Wendell P…".
 - **What the user experiences:**
   - Names are cut off.
-  - Cards are not ordered by "Next on track", so the instructor reads all three to find who is next.
-  - The reminder does not say which student, though it names the group.
+  - The cards aren't in "next on track" order: Owen is out at 8:00, Wendell at 8:15, Simone at 9:45, but Simone's card comes second.
+  - The reminder reads "Your student is on track in 15 min" without saying which student.
 - **Recommendation:**
-  - Let the name wrap (drop `truncate`, move the chip and number under the name on narrow screens).
-  - Sort cards by next session time and add "· False grid" to the "Next on track" line.
+  - Let the name wrap, and put the run-group chip and car number below it at 375px.
+  - Sort the cards by next session.
   - Reminder title: "Owen is on track in 15 min (Green 10:10)".
-- **Verify:** At 375px all full names show, and the first card is the student who goes out next.
+- **Verify:** At 375px the full names show, and the first card is the next student out.
 
 ### UX-012 — Show each instructor's true load in the pairing dropdown
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
 - **Who / when:** Chief Driving Instructor pairing before the drivers meeting.
-- **Where:** `src/app/(app)/admin/instructors/assign-select.tsx:52`; `page.tsx` computes `load` excluding the current student.
+- **Where:** `src/app/(app)/admin/instructors/assign-select.tsx:34` (pairs on `onChange`) and `page.tsx:243` (the load leaves out the current student).
 - **What the user experiences:**
-  - Desmond Achebe's dropdown reads "Yvonne Traylor · free", although Yvonne has one student: Desmond.
-  - Long labels truncate to "Rosalind Achterberg · 2 stude".
-  - Pairing fires on `onChange`, so keyboard arrowing through a closed select (Windows browsers) pairs and alerts at every step.
+  - The student's current instructor reads "· free" although they are paired with this very student.
+  - Arrowing through a closed select pairs at every step and sends an alert each time.
 - **Recommendation:**
-  - For the selected option, show "Yvonne Traylor (paired)". For the others, show the total load ("2 students", "free").
-  - Shorten the labels to "Rosalind A. · 2".
-  - Pair on a small "Pair" button, or debounce until the select closes.
-- **Verify:** The selected instructor never reads "free", and arrowing through options sends no alerts.
+  - Label the selected option "(paired)", and show the total load on the others.
+  - Pair only once the select is committed: on blur or with a "Pair" button.
+- **Verify:** The selected instructor never reads "free", and arrowing through the options sends nothing.
 
 ### UX-013 — Email the driver when their tech form is approved
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
-- **Who / when:** First-time driver at home in the week before, waiting to hear they are done.
-- **Where:** `src/app/(app)/admin/tech/actions.ts:61`: the approval goes `["inapp", "push"]`, while "changes requested" (`:107`) also emails.
-- **What the user experiences:** The tech page says "you will get an alert here as soon as yours is approved or sent back". If it is sent back, they get an email. If it is approved, they get nothing outside the app, so they keep checking.
-- **Recommendation:** Add `"email"` to the approval send, with the existing body ("Your shop inspection paperwork is done. At the track, bring the car to the tech shed with your helmet and your numbers on to get your sticker.").
+- **Who / when:** First-time driver at home, waiting to hear they are done.
+- **Where:** `src/app/(app)/admin/tech/actions.ts:63`: `["inapp", "push"]`. A sent-back form (`:109`) is also emailed.
+- **What the user experiences:** Bad news arrives by email and good news doesn't, so the driver keeps checking the app.
+- **Recommendation:** Add `"email"` to the approval send, with the link footer from UX-021.
 - **Verify:** Approving a form writes an email row to the delivery log.
 
 ### UX-014 — Show drivers whether they are checked in
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
 - **Who / when:** Driver on event morning.
-- **Where:** `src/app/(app)/home/page.tsx`: "Before you drive" lists Waivers, Shop inspection and Tech sticker. `registration.checkedInAt` is never shown to the driver.
-- **What the user experiences:** The driver cannot tell from the app whether they still need to stop at registration.
-- **Recommendation:**
-  - On event days, add a first row "Registration", reading either "Checked in at 6:50 AM ✓" or "Not checked in yet. Go to driver registration, centre of the paddock."
-  - Link the row to the maps place.
-- **Verify:** Before and after an admin check-in, the row changes on the driver's Now screen within 20 seconds.
+- **Where:** `src/app/(app)/home/page.tsx:293–335`: the "Before you drive" card has Waivers, Shop inspection and Tech sticker, but no registration row.
+- **What the user experiences:** The driver can't tell whether they still need to stop at registration.
+- **Recommendation:** On event days, add a first row "Registration" that reads either "Checked in at 6:50 AM" or "Not checked in yet: go to driver registration".
+- **Verify:** The row changes within 20 seconds of an admin checking the driver in.
 
 ### UX-015 — After the last waiver, point to the tech inspection
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** S
 - **Who / when:** First-time driver doing paperwork at home.
-- **Where:** `src/app/(app)/me/waivers/[id]/page.tsx:60`.
-- **What the user experiences:** Signing chains nicely ("Next: Roebling Road Raceway track waiver"). After the last one, the only button is "Back to waivers", and the driver must remember that tech comes next.
-- **Recommendation:** When no required waiver remains and tech is not approved, show "All waivers signed. Next: your tech inspection →" linking to `/me/tech`. If tech is already done, show "Back to Now".
+- **Where:** `src/app/(app)/me/waivers/[id]/page.tsx:58`.
+- **What the user experiences:** After the last waiver, the only button is "Back to waivers".
+- **Recommendation:** If tech isn't approved yet, show "All waivers signed. Next: your tech inspection →" (to `/me/tech`). Otherwise show "Back to Now".
 - **Verify:** Signing the last waiver offers the tech inspection as the next step.
 
 ### UX-016 — Check for open items before an event is marked completed
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Effort:** M
 - **Who / when:** Event chair after the weekend.
-- **Where:** `src/app/(app)/admin/events/forms.tsx:97`: status is a plain select with "Completed".
-- **What the user experiences:** The chair can complete an event with recommendations still waiting and an incident report unsent. Nothing warns them, and the past event drops out of their daily view.
-- **Recommendation:** When "Completed" is chosen, list what is still open ("2 promotion recommendations waiting · 1 incident report not sent to PCA, due Nov 27"), each with a link, and require a second click: "Complete anyway".
-- **Verify:** Completing the demo event shows the two open items first.
+- **Where:** `src/app/(app)/admin/events/forms.tsx:96`: a plain status select. `actions.ts` doesn't check anything.
+- **What the user experiences:** The event can be completed with promotion recommendations still waiting and an incident report not yet sent to PCA.
+- **Recommendation:** When "Completed" is chosen, list what is still open, with links ("2 recommendations waiting · 1 incident report not sent, due Nov 27"), and require a second click: "Complete anyway".
+- **Verify:** Completing the demo event shows the open items first.
 
 ## P4 Polish
 
-**UX-017 — Rename "Cancel" on schedule rows to "Cancel session".** In `admin/schedule/page.tsx`, every row has a ghost "Cancel" button, the same word every dialog uses to dismiss. "Cancel session" (and "Restore session") removes the ambiguity. The confirmation is already good.
+**UX-017 — Rename the schedule row's "Cancel" to "Cancel session".** In `admin/schedule/page.tsx:203`, "Cancel" is the same word every dialog uses to dismiss. Use "Cancel session" and "Restore session".
 
 **UX-018 — State the hidden rules on forms and tables.**
-- Roster table: add "Sorted by last name" next to "Showing 42 of 42 people".
-- Recommend sheet: the rationale has `minLength={40}`, but the hint does not say so. Add "At least a couple of sentences."
-- Contact sheet: "Street address" is marked Optional but City, State and ZIP are not. Mark them the same way.
+- Roster: say "sorted by last name" next to "Showing 42 of 42 people".
+- Recommend sheet: the rationale has `minLength={40}` (`instructor/forms.tsx:269`) but the form doesn't say so. Add "At least a couple of sentences."
+- Contact sheet: "Street address" is marked Optional, but City, State and ZIP aren't. Mark them the same way.
 
-**UX-019 — Raise small tap targets on phone screens.** The instructor call button (`size-9`, 36px), the `sm` buttons ("Log a session", "Recommend", "Private note", 36px tall) and the roster's "Check in" on phones fall under 44px. Use `md` sizes below the `sm` breakpoint.
+**UX-019 — Raise small tap targets on phones.** These are 36px:
+- the call button on My students (`size-9`);
+- the `sm` buttons "Log a session", "Recommend" and "Private note";
+- the focus chips in the log sheet (`h-9`);
+- the roster's "Check in" on phones.
 
-**UX-020 — Give each item in the "Before you drive" banner its own link.** `home/page.tsx:124` joins all to-dos ("Sign 2 waivers · Start your tech inspection") into one link that only goes to the first. Render each to-do as its own row or link.
+Use 44px below the `sm` breakpoint.
+
+**UX-020 — Give each item in the "Before you drive" banner its own link.** `home/page.tsx:159` joins the to-dos ("Sign 2 waivers · Start your tech inspection") into one link that only goes to the first.
+
+**UX-024 — Reword "Time changed: moved from 10:10 AM".** In `now-panel.tsx:169`, the pill says the change twice. Use "Moved from 10:10 AM", matching the "Your day" rows and the Schedule.
 
 ## What works well
-- **The shop's inspection page** (`src/app/tech/[token]/shop-form.tsx`):
-  - a sticky "n of 30 items marked" bar with "Next unmarked";
-  - live tire-age and brake-fluid checks;
-  - errors that scroll to the field;
-  - input kept in state, so a rejected submit loses nothing.
-
-  A technician who never comes back can finish it in one go.
-- **Input survives errors everywhere** (`src/components/form.tsx` `ActionForm`, `me/waivers/sign-form.tsx`, `me/tech/steps.tsx`). Names and drawn signatures are kept when a submit fails.
-- **The driver's tech page** (`src/app/(app)/me/tech/page.tsx`) is a five-step checklist. It explains the inspection window in plain dates ("Opens in 4 days…") and says exactly what to do when a form is sent back.
-- **Run-group colour always carries its name.** `GroupChip` prints "GREEN" or "BLUE", and the Schedule's "You" and "With Owen" tags mark relevance without relying on colour alone.
-- **The incident report** mirrors the PCA paper form in the print view. It has a draft watermark, a due date tied to the injury rule, a "Before it can be marked final, add:" list and a link to the named driver's signed waivers.
-- **The turn-by-turn guide** (`/track/turns`): big turn numbers, a four-step "Through the corner" summary, then the full text. It is readable on a phone at arm's length.
+- **The urgent strip on Now** (`src/app/(app)/home/urgent-alerts.tsx`): yellow with a black edge and a large "Got it". Only two are shown in full, so the board is never pushed off the first screen, and a "n more urgent alerts unread" link covers the rest.
+- **Cancelled and moved sessions are said, not hidden** (`src/lib/schedule.ts` `myDay`/`movedFrom`, `now-panel.tsx:145`):
+  - "Your 10:10 AM Green session is cancelled." appears above "Your next".
+  - Cancelled rows are struck through, with a "Cancelled" pill, the same way on Now and on Schedule.
+- **Grid tech separates "sticker issued" from "cleared"** (`admin/tech/grid/page.tsx:154–211`): a waiver row with "Open their waivers", an amber "Sticker issued · not cleared to drive" panel, and a driver alert that names the missing waivers.
+- **The shop's page and email** (`src/app/tech/[token]/*`, `me/tech/actions.ts:163`):
+  - The email names the driver, car, event, track and expiry date.
+  - The page has clear states: "Inspection recorded", "This link has expired" and "This link is not valid".
+  - This is the model UX-021 asks the other messages to follow.
+- **Schedule edits report who was told** (`admin/schedule/actions.ts:217`): "Schedule updated, and 8 people alerted". A session moved to another group also alerts the group that lost it.
+- **Run-group colour always carries its name** (`GroupChip` prints "GREEN" or "WHITE"). It is visible on every screen captured, including the grid list.
 
 ## Declined
 None.
 
 ## Resolved since last run
-First run; nothing to compare against.
+- **UX-001 — Put schedule changes and urgent alerts at the top of the Now screen** — resolved:
+  - Unread urgent alerts now sit first on Now until "Got it" (`urgent-alerts.tsx`).
+  - Cancelled sessions stay in "Your day", struck through, and "Your next" says what it skipped.
+  - Moved sessions show "moved from …".
+- **UX-002 — Use one meaning of "cleared"** — resolved:
+  - Grid tech now shows "Waivers: n of n signed".
+  - The panel and the driver's alert say "not cleared to drive" while waivers are missing (`admin/tech/grid/page.tsx`, `admin/tech/actions.ts:368`).
 
 ## Coverage notes
-- **Screenshots:** available (89 captures, capture exit 0). I looked at:
-  - driver: Now, Schedule, Alerts, Profile, Tech, Waiver detail, Track overview and Turns;
-  - instructor: My students;
-  - admin: Overview, Roster, Schedule editor, Instructor pairing, Tech queue, Grid tech, Announcements, Promotions, Waivers, Events, and the incident print view.
+- **Screenshots:** available (91 captures, capture exit 0). I looked at:
+  - `driver-home-phone`, `driver-alerts-phone`
+  - `instructor-instructor-phone`
+  - `admin-admin-tech-grid-u-desktop`
+  - the `.txt` captures for driver Profile and the admin roster.
 
-  The remaining screens (track flags, rules, maps, docs, passing sheet; settings; the roster driver file; waiver templates; tech shops; delivery log) I judged from source and their `.txt` captures.
-- **No screenshot existed** for the sign-in page or the shop's `/tech/[token]` page. I reviewed both from source.
-- **Event-day states** (live board, grid call, cancelled and delayed sessions) were judged from source, because the capture ran five days before the demo event.
-- **Read only partly:** `incident-form.tsx` (structure, labels and footer), `admin/roster/[userId]/page.tsx`, `admin/waivers/*`, `admin/settings/forms.tsx` and `admin/tech/[id]` (via their text captures and action messages). Findings there may be incomplete.
-- **Not judged:** hover and focus rendering, dialogs and error states (from source only); actual email, SMS and push delivery (not connected in the capture).
-- **No previous report or mockups existed**, so all findings are new. I did not look outside the snapshot.
+  I judged the other screens from source and their earlier review, concentrating on what changed and on re-checking each previous finding.
+- **This run focused on** re-checking the 20 previous findings against the current code, plus the paths most likely to have changed:
+  - Now, schedule logic and alerts;
+  - grid tech;
+  - schedule actions;
+  - notification wording;
+  - sheets and forms;
+  - the shop page;
+  - incident send.
+- **Not re-read in full this run:**
+  - `incident-form.tsx` and the print view;
+  - the admin settings and waivers pages;
+  - the driver file (`admin/roster/[userId]`);
+  - the track guide pages.
+
+  Last run's judgement of them stands.
+- **Not in the snapshot:** `src/server/` holds only `notify.ts` and `reminders.ts`. So the sign-in redirect for signed-out visitors, `clearanceFor`, `audienceUserIds` and the query helpers were judged only by how they are called.
+- **Judged from source because they aren't captured:**
+  - event-day states (live board, grid call, offline);
+  - dialogs, hover, focus and errors;
+  - the shop's `/tech/[token]` page.
+
+  Real email, text and push delivery isn't connected in the capture.
+- I did not look outside the snapshot.
 
 ## Mockup files
 
-- UX-001.html
-- UX-002.html
-- UX-004.html
-- UX-005.html
-- UX-007.html
+- UX-022.html
+- UX-021.html

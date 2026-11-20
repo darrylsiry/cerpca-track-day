@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-021 — Emails and texts a driver can act on</title>
+<style>
+body{margin:0;background:#f3f2ee;color:#16181b;font:15px/1.5 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;padding:24px}
+h1{font:800 22px/1.1 "Arial Narrow",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0 0 16px}
+.cols{display:flex;gap:32px;flex-wrap:wrap}
+.col{width:420px}
+.lab{font:800 13px "Arial Narrow",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.08em;color:#555;margin-bottom:8px}
+.mail{background:#fff;border:1px solid #d6d3cb;border-radius:14px;overflow:hidden}
+.hd{border-bottom:1px solid #e4e1d9;padding:12px 16px;font-size:13px;color:#555}
+.hd b{display:block;color:#16181b;font-size:16px;margin-top:2px}
+.bd{padding:14px 16px}
+.bd p{margin:0 0 10px}
+a{color:#16181b;font-weight:700}
+.sms{margin-top:18px;background:#e9e9ee;border-radius:18px;padding:10px 14px;font-size:14px;max-width:320px}
+.foot{color:#555;font-size:13px;border-top:1px solid #e4e1d9;padding-top:8px}
+.chg{background:#fff4d6;box-shadow:inset 3px 0 0 #c0392b;padding-left:6px}
+</style></head><body>
+<h1>UX-021 · "Your tech form needs changes"</h1>
+<div class="cols">
+<div class="col"><div class="lab">Before</div>
+ <div class="mail"><div class="hd">From: Track Day<b>Your tech form needs changes</b></div>
+  <div class="bd"><p>Brake pad thickness not recorded for the rear axle.</p></div></div>
+ <div class="sms">Green: on track in 15 min: You go out at 10:10 AM. Get your car to the grid.</div>
+</div>
+<div class="col"><div class="lab">After</div>
+ <div class="mail"><div class="hd">From: Track Day<b><span class="chg">CERPCA:</span> Your tech form needs changes</b></div>
+  <div class="bd">
+   <p class="chg">The tech team sent your form back. What to fix:</p>
+   <p>Brake pad thickness not recorded for the rear axle.</p>
+   <p class="chg">Open it in Track Day:<br><a href="#">https://cerpca.siryous.app/me/tech</a></p>
+   <p class="foot chg">Fall Driver Education · November 21–22 · Roebling Road · CERPCA</p>
+  </div></div>
+ <div class="sms">Green: on track in 15 min: You go out at 10:10 AM. Get your car to the grid. <span class="chg"><a href="#">cerpca.siryous.app/schedule</a></span></div>
+</div>
+</div></body></html>

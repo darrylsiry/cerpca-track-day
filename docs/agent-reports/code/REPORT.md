@@ -4,250 +4,251 @@
 overwrites this file. Coding agents: fix items top-down by severity and cite the `CR-NNN` ID. The
 auditor marks items resolved when it sees the fix.*
 
-- **Run:** 2026-11-16 14:46
-- **Code version:** `ba0ba61f`
-- **Previous run:** none
+- **Run:** 2026-11-19 18:25
+- **Code version:** `b03e3116`
+- **Previous run:** 2026-11-16 14:46
 
 ## Summary
 
 | Severity | Open | New this run | Resolved this run |
 |----------|------|--------------|-------------------|
-| Critical | 1 | 1 | 0 |
-| High | 5 | 5 | 0 |
-| Medium | 7 | 7 | 0 |
-| Low | 7 | 7 | 0 |
-| Suggestion | 3 | 3 | 0 |
+| Critical | 0 | 0 | 1 |
+| High | 1 | 1 | 5 |
+| Medium | 8 | 1 | 0 |
+| Low | 11 | 4 | 0 |
+| Suggestion | 3 | 0 | 0 |
 
-The code is well organised and the type-check and linter both pass. The most important problem is clearance. Most screens that count waivers (the driver's Now and Profile screens, the roster, the admin overview, the CSV export and the driver file) ignore the waiver version. After an admin requires everyone to sign again, these screens still show a driver as "Cleared to drive". Fix CR-001 first, then make "cleared" mean the same thing everywhere (CR-002).
+A lot has been fixed since the last run. "Cleared to drive" now means the same thing everywhere, pairings end when someone leaves, reminders include the day in their key, and lost-audience alerts and re-imports are handled. The most important problem left is in pairing. The auto-pairer and the clash warning only check whether two students share a run group, not whether they are on track at the same time. In the seeded Sunday, one instructor can be given a Green and a Blue student who both drive in the "Green and Blue" session. Fix CR-024 next.
 
 ## Critical
 
-### CR-001 — Count only current-version waiver signatures everywhere clearance is shown
-- **Status:** New
-- **Where:** `src/server/queries.ts:125-139`, `src/server/admin.ts:57-63,85-91,129`, `src/app/(app)/admin/roster/[userId]/page.tsx:176-178`; consumed by `src/app/(app)/home/page.tsx:117-121`, `src/app/(app)/me/page.tsx:42`, `src/app/(app)/admin/page.tsx:72-86`, `src/app/(app)/admin/roster/roster-table.tsx:45`, `src/app/(app)/admin/roster/export/route.ts:77`
-- **Problem:** Ticking "Require everyone to sign again" raises `waiver_templates.version`. `waiverMatrix` and `/me/waivers` then treat older signatures as no longer current (`isCurrent`). Three other code paths count any signature row whatever its version:
-  - `getChecklist` feeds the driver's Now and Profile screens and the "Cleared to drive" pill.
-  - `getRosterView` feeds the roster, the admin overview's "Cleared to drive" and "Waivers signed" counts, and the CSV export.
-  - The driver-file page does its own count.
-
-  So after a re-sign, a driver with an outdated signature is shown as cleared on the main screens, while the Waivers screen says they are not.
-- **Evidence:**
-  ```ts
-  // queries.ts
-  const signedIds = new Set(signed.map((x) => x.templateId));       // version selected but never compared
-  waiversSigned: required.filter((t) => signedIds.has(t.id)).length,
-  // admin.ts
-  .select({ userId: s.waiverSignatures.userId, templateId: s.waiverSignatures.templateId })  // no version
-  // roster/[userId]/page.tsx
-  const signed = sigs.filter((x) => templates.some((t) => t.id === x.templateId)).length;
-  ```
-  The UAT test `50-admin-paperwork.spec.ts:981` ("a signature on an earlier version stops counting everywhere…") asserts the correct behaviour, but only with `expect.soft`. The seed signs every template at version 1, so the demo data never shows the problem.
-- **Fix:** Put one helper in `src/server/waivers.ts`, for example `currentSignedCount(templates, sigs)`, built on `isCurrent`. Select `templateVersion` and `version` in all three queries and use the helper everywhere. Better still, have `getChecklist`, `getRosterView` and the driver-file page all call `waiverMatrix` or a shared per-user variant, so there is one definition of "signed".
-- **Verify:** Sign every required waiver as one driver, then re-version one template with "sign again". The Now screen should lose "Cleared to drive" and show "N-1 of N signed". The roster and export cell should read `N-1/N`, the admin overview's cleared count should drop by one, and the driver file should read "N-1 of N signed". The soft assertions in `50-admin-paperwork.spec.ts:981` should pass; make them hard assertions.
+None.
 
 ## High
 
-### CR-002 — Stop showing "cleared to drive / go on track" on the strength of a sticker alone
+### CR-024 — Detect pairing clashes from the schedule, not from run-group ids
 - **Status:** New
-- **Where:** `src/app/(app)/me/tech/page.tsx:135-138`, `src/app/(app)/admin/tech/grid/page.tsx:149-153`, `src/app/(app)/admin/tech/actions.ts:342-357`
-- **Problem:** Two screens call a driver cleared on the sticker alone:
-  - The driver's Tech screen says "You are cleared to drive" whenever a sticker exists.
-  - The grid-tech screen says "Cleared to go on track" in the same case.
+- **Where:** `src/app/(app)/admin/instructors/actions.ts:170-179`, `src/app/(app)/admin/instructors/page.tsx:107-112,250-252`; schedule data `src/db/seed.ts:213-214`
+- **Problem:** "Pair the rest for me" gives an instructor up to two students, as long as they are in different run groups. The per-instructor warning and the dropdown's "same group clash" use the same rule. Combined sessions put different groups on track together:
+  - The live demo Sunday has "Green and Blue" at 15:10 and "Red, Black and White" at 15:40.
+  - The alternate Sunday has "Green and Blue Instructed".
 
-  Issuing a sticker never checks waivers. Home and the admin overview, by contrast, require waivers, approved tech and a sticker. A driver with unsigned (or out-of-date) waivers can be told they are cleared, and grid staff see a green "Cleared to go on track" panel for them.
-- **Evidence:**
-  ```tsx
-  {sticker ? (<Notice tone="good" title="You are cleared to drive"> …     // me/tech/page.tsx
-  {insp?.stickerIssuedAt ? ( … <p className="eyebrow …">Cleared to go on track</p>   // grid/page.tsx
-  ```
-  `saveGridTech` checks only `insp.status === "approved"` and the ten grid items.
-- **Fix:** Add one shared `clearance(eventId, userId)` helper in `src/server/` that returns waivers, tech and sticker using the CR-001 counting. Use it on `/me/tech`, the grid page, home and the admin overview. On the grid, show "Car passed tech. Waivers outstanding: N" until the waivers are current. Either block sticker issue while required waivers are outstanding, or warn before issuing.
-- **Verify:** For a driver with approved tech and one unsigned required waiver, issue a sticker. `/me/tech` must not say "cleared", and the grid must show waivers outstanding.
-
-### CR-003 — End or flag pairings when the instructor (or student) leaves the event
-- **Status:** New
-- **Where:** `src/app/(app)/admin/roster/actions.ts:158,197-215`, `src/app/(app)/admin/instructors/page.tsx:70-79`, `src/app/(app)/admin/page.tsx:87-92`, `src/server/queries.ts:76-90`, `src/server/reminders.ts:114-116`
-- **Problem:** Cancelling a registration (`removeFromEvent`), or unticking "Instructor" in `savePerson`, leaves every `instructor_assignments` row in place.
-  - **When the instructor leaves:** their students still count as paired, so a Green or Blue Instructed driver is not listed as unpaired, "Pair the rest for me" does not reach them, and the overview's unpaired count is too low. The reminder job, meanwhile, quietly drops the instructor (`regs.some(...)`), so nobody meets the student at the grid.
-  - **When the student is cancelled:** they still appear on the instructor's list and schedule, because `getPeople` does not filter by status.
+  So the auto-pairer can give one instructor a Green and a Blue Instructed student, two people who must both have an instructor in the right seat in the same session. No warning is shown. An instructor (Red) paired with a White ride-along also clashes with their own session at 15:40.
 - **Evidence:**
   ```ts
-  for (const a of assignments) { studentsOf.get(a.instructorId)?.push(a.studentId); instructorOf.set(a.studentId, a.instructorId); }
-  const unpaired = needs.filter((n) => needOf(n) !== null && !instructorOf.has(n.userId));
+  !load.get(i.userId)!.includes(student.groupId) && load.get(i.userId)!.length < 2
+  ...
+  clash: theirs.some((id) => byId.get(id)?.groupId === st.groupId),
   ```
-  `instructorOf` is built from every assignment, with no check that the instructor is still on the roster and instructing.
-- **Fix:** When a registration is cancelled, delete its assignments in both roles and notify the other person. Do the same when `savePerson` clears `isInstructor`. As a defensive measure, build `instructorOf`/`paired` only from assignments whose instructor is in `rows` with `isInstructor`, and filter `getPeople`/`getAssignments` to `status <> 'cancelled'`.
-- **Verify:** Pair a Green driver, then cancel the instructor's registration. The Green driver must appear under "need an instructor" on `/admin/instructors` and on the overview.
-
-### CR-004 — Include the day in the reminder de-duplication key
-- **Status:** New
-- **Where:** `src/db/schema.ts:309-321`, `src/server/reminders.ts:81-90`, `src/app/(app)/admin/schedule/actions.ts:150-155`
-- **Problem:** `reminder_once` is unique on `(schedule_item_id, offset_min, start_min)`. Suppose a session's reminders fire on Saturday, and the admin then moves it to Sunday at the same start time (a rained-out session made up the next day). The Sunday insert hits the conflict, `claimed` is empty, and no reminder is ever sent for Sunday. The comment promises that "a session that is rescheduled reminds again for its new time".
-- **Evidence:**
   ```ts
-  (t) => [uniqueIndex("reminder_once").on(t.scheduleItemId, t.offsetMin, t.startMin)],
+  { t: "15:10", end: "15:40", kind: "track", title: "Green and Blue", groups: ["green", "blue"] },
   ```
-  `saveItem` lets `day` change while keeping the same item id.
-- **Fix:** Add a `day text not null` column to `reminder_sends`, include it in the values and in `reminder_once`, then run `db:generate` for a migration.
-- **Verify:** With a fixed `now`, call `runReminders` for Saturday 08:45 against an item at 09:00. Move the item to Sunday 09:00, then call `runReminders` for Sunday 08:45. A second set of reminders must go out.
-
-### CR-005 — Tell the people a session used to be for when its run groups change
-- **Status:** New
-- **Where:** `src/app/(app)/admin/schedule/actions.ts:138-169`
-- **Problem:** On edit, the "Schedule change" alert goes only to the new audience (`audienceOf({ audience, groupIds, groupParts })`). If an admin moves a session from "Blue Solo and White" to "Black", Blue Solo and White are never told it is gone. If the audience becomes "none", nobody is told at all. The people who lost the session are exactly the ones who need the alert.
-- **Evidence:**
-  ```ts
-  const audienceForNotice = audienceOf({ audience, groupIds, groupParts });
-  if (bool(fd, "notify") && audienceForNotice) await announceChange(v, audienceForNotice, "Schedule change", changed);
-  ```
-- **Fix:** When editing, compute the user ids for `audienceOf(before)` and for the new audience. Notify the union, with wording specific to the removed audience ("X is no longer for your group") where they differ.
-- **Verify:** Change a Blue-only session to White with notify ticked. A Blue driver and a White driver should each get an alert.
-
-### CR-006 — Keep a re-import from overwriting run groups set in the app
-- **Status:** New
-- **Where:** `src/app/(app)/admin/roster/actions.ts:423-437`, `src/server/roster-import.ts:285-311`
-- **Problem:** On re-import, an existing registration's `runGroupId` is overwritten with the group parsed from the export. That undoes any "apply now" promotion or direct group change an admin made in the app. It also ignores `memberships.runGroupId`, which the schema says "promotions update", so a driver approved "from the next event" is imported into their old group. Labels such as "Blue Solo" are not parsed into `solo`.
-- **Evidence:**
-  ```ts
-  const values = { runGroupId: row.groupId, … };
-  if (reg) await db.update(s.registrations).set(values).where(eq(s.registrations.id, reg.id));
-  ```
-- **Fix:** On update, leave `runGroupId` and `solo` alone unless the registration has never been changed in the app. When the export disagrees with the app, list it in the preview so the admin can choose. On insert, prefer `member.runGroupId` when it is a higher group than the export's, or flag the mismatch in the preview.
-- **Verify:** Promote a driver with "apply now", then re-import the same file. The driver's group must be unchanged, or the preview must call out the conflict.
+  The UAT test `30-pairing-promotions.spec.ts:308` asserts only "no same-group clash", so it passes while the bug is present.
+- **Fix:** Add a helper in `src/server/pairings.ts`, for example `clashes(schedule, instructor, students)`. It should return the track items (not cancelled, on days both people attend) where two of the instructor's students are both `inItem`, or where a student and the instructor's own group/half are both `inItem`. Use it in `suggestPairings` to reject a candidate, and on the pairing page for the warning and the dropdown flag. Name the clashing session in the warning ("both on track at Sun 3:10 PM, Green and Blue").
+- **Verify:** On the seeded event, leave one free instructor and two unpaired drivers, one Green and one Blue Instructed. "Pair the rest for me" must pair only one of them and report one stuck. Manually pairing both with that instructor must show the clash warning naming the 15:10 Sunday session.
 
 ## Medium
 
-### CR-007 — Apply cancellations from the registration export
+### CR-025 — Give event instructors the instructor role, or gate instructor screens on the registration
 - **Status:** New
-- **Where:** `src/app/(app)/admin/roster/actions.ts:329-332`
-- **Problem:** Rows whose status is cancelled are skipped rather than applied. If someone was imported as confirmed and later cancelled on ClubRegistration, re-importing leaves them confirmed. They keep getting session reminders and stay counted on the roster.
+- **Where:** `src/app/(app)/admin/roster/actions.ts:105-130,173,512-531,575`, `src/server/auth.ts:278-282`, `src/app/(app)/instructor/page.tsx:34`, `src/app/(app)/instructor/actions.ts:40,98,126`, `src/components/shell/props.ts:8,19`
+- **Problem:** The roster's "Instructing at this event" and the import's instructor column set `registrations.is_instructor`. That flag is what pairing uses (`assignInstructor`, `livePairings`, reminders). The instructor screens and actions, however, check `memberships.is_instructor` (`requireInstructor`). For an existing member, `savePerson` updates only `experience` on the membership, and the import never touches an existing membership. So someone ticked as instructing for this event can be paired, and their students are told "Your instructor is X", but X is redirected away from My students, cannot log sessions or recommend promotions, and has no Instructor tab.
+- **Evidence:**
+  ```ts
+  } else if (fd.has("experience")) {
+    await db.update(s.memberships).set({ experience: ... })
+  ```
+  ```ts
+  if (!v.isInstructor && !v.isAdmin) redirect("/home");   // v.isInstructor = membership.isInstructor
+  ```
+- **Fix:** Pick one source of truth. Either set `memberships.isInstructor = true` whenever a registration is saved or imported with `isInstructor`, or have `requireInstructor` (and the nav props) accept `v.registration?.isInstructor` as well as the membership flag. The second option matches "instructing at this event".
+- **Verify:** Take a seeded White driver with no instructor role. Tick "Instructing at this event" on the roster and pair a Green driver with them. Signing in as that person must show My students with the Green driver, and logging a session must succeed.
+
+### CR-007 — Apply cancellations from the registration export
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/roster/actions.ts:469-472`
+- **Problem:** Rows whose status is cancelled are still skipped rather than applied. Someone imported as confirmed and later cancelled on ClubRegistration stays confirmed on re-import, keeps getting reminders and stays paired.
 - **Evidence:**
   ```ts
   if (!row.email || !row.groupId || row.status === "cancelled") { skipped += 1; continue; }
   ```
-- **Fix:** For a cancelled row that matches an existing registration, set `status: "cancelled"` (and clean up pairings, see CR-003) and count it as updated. Skip only when there is no existing registration.
-- **Verify:** Import a file with a confirmed row, then re-import with that row marked "Cancelled". The person should be off the roster.
+- **Fix:** When a cancelled row matches an existing, non-cancelled registration, set `status: "cancelled"`, call `endPairings(eventId, userId, { asInstructor: true, asStudent: true })`, and count it as updated. List it in the preview ("will be cancelled"). Skip only when there is no registration.
+- **Verify:** Import a confirmed row, then re-import with that row marked "Cancelled". The person leaves the roster, and any pairing ends with alerts.
 
-### CR-008 — Make multi-row schedule writes atomic
-- **Status:** New
-- **Where:** `src/app/(app)/admin/schedule/actions.ts:258-287` (shift), `:338-359` (copy), `src/app/(app)/admin/events/actions.ts:61-72` (date move)
-- **Problem:** The code base never uses `db.transaction`.
-  - `copySchedule` deletes the current schedule and then inserts the copy, so a failure between the two leaves an empty schedule mid-event.
-  - `shiftSchedule` reads the rows and writes absolute values one row at a time. A failure part-way leaves half the day shifted. Two admins pressing "delay 10" together can lose one delay or apply one twice.
-  - `saveEvent` moves item days in a loop and never calls `bumpSchedule`, so open apps are not told to refresh.
-- **Fix:** Wrap each operation in `db.transaction(async (tx) => …)`; this works on both PGlite and node-postgres. Do the shift as one statement: `update schedule_items set start_min = start_min + $n, end_min = end_min + $n where event_id = $e and day = $d and start_min >= $from`. Call `bumpSchedule` after the event's dates move.
-- **Verify:** Trigger two shifts concurrently and check the sum is applied exactly once each. Force the insert in `copySchedule` to throw and confirm the original schedule survives.
+### CR-008 — Make multi-row schedule, event and import writes atomic
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/schedule/actions.ts:311-341` (shift), `:379-413` (copy), `src/app/(app)/admin/events/actions.ts:61-72` (date move), `src/app/(app)/admin/roster/actions.ts:468-598` (import)
+- **Problem:** The code still never uses `db.transaction`.
+  - `copySchedule` deletes the schedule, then inserts the copy.
+  - `shiftSchedule` reads the rows, then writes absolute values row by row, so two concurrent delays can lose or double one.
+  - `saveEvent` moves item days in a loop and never calls `bumpSchedule`, so open apps are not refreshed.
+  - The import writes row by row. Its error path says "The import failed. Nothing was changed." when earlier rows were already written.
+- **Fix:** Wrap each operation in `db.transaction(async (tx) => …)`; this works on PGlite and node-postgres. Shift with one statement: `set start_min = start_min + $n, end_min = end_min + $n where event_id = $e and day = $d and start_min >= $from`. Call `bumpSchedule` after a date move. Make the import message truthful, or make the import one transaction.
+- **Verify:** Run two shifts concurrently and get both applied exactly once. Make the `copySchedule` insert throw and confirm the old schedule survives. After moving an event's dates, an open Schedule tab refreshes within 20 s.
 
 ### CR-009 — Decide a promotion with a conditional update
-- **Status:** New
-- **Where:** `src/app/(app)/admin/promotions/actions.ts:94-107`
-- **Problem:** The check that the recommendation is still `proposed` and the update are separate statements. Two admins acting at once (one approving, one declining) both pass the check. The promotion is then applied while the record says declined, or the driver is notified twice.
-- **Fix:** `update promotions set … where id = $id and status = 'proposed' returning id`. If no row comes back, return "already decided" before calling `applyPromotion` or notifying anyone.
-- **Verify:** Fire two `decidePromotion` calls for the same id in parallel. Exactly one must succeed.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/promotions/actions.ts:83-105`
+- **Problem:** The `status !== "proposed"` check and the update are still separate statements. Two admins deciding at once can both apply and notify, leaving the record and the applied change in disagreement.
+- **Fix:** `update promotions set … where id = $id and org_id = $org and status = 'proposed' returning id`. If no row comes back, return "already decided" before `applyPromotion` or any notification.
+- **Verify:** Fire two `decidePromotion` calls for one id in parallel. Exactly one succeeds.
 
 ### CR-010 — Make sticker numbers unique and never reused
-- **Status:** New
-- **Where:** `src/server/tech.ts:115-133`, `src/app/(app)/admin/tech/actions.ts:354-358,386-393`
-- **Problem:** `nextStickerNumber` finds the highest number in use and adds one, with no lock and no unique constraint. Two grid workers issuing at the same moment get the same number. Revoking clears `stickerNumber`, so if the highest sticker is revoked, its number is handed out again while the physical sticker may still be on the other car.
-- **Fix:** Add a unique index on `(event_id, sticker_number)` and retry on conflict, or keep a per-event counter column incremented atomically. On revoke, keep the number in a separate `revokedStickerNumber` column (or keep a counter) so it is never reissued.
-- **Verify:** Issue two stickers concurrently and get two different numbers. Revoke the latest and issue again; the number must differ.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/tech.ts:115-133`, `src/app/(app)/admin/tech/actions.ts:356-360,396-403`, `src/db/schema.ts:432-437`
+- **Problem:** `nextStickerNumber` still takes max+1 with no lock or unique index. Revoking still clears `stickerNumber`, so revoking the highest sticker hands its number out again.
+- **Fix:** Add a unique index on `(event_id, sticker_number)` and retry on conflict, or use an atomic per-event counter. On revoke, keep the number (for example in `revoked_sticker_number`) so it is never reissued.
+- **Verify:** Issue two stickers concurrently and get two different numbers. Revoke the latest, issue again, and get a new number.
 
 ### CR-011 — Keep upload sizes under Vercel's request-body limit
-- **Status:** New
-- **Where:** `src/server/tech.ts:14`, `src/app/(app)/me/tech/steps.tsx:189`, `next.config.ts:12`, `src/app/(app)/admin/incidents/actions.ts:107,161-163`
-- **Problem:** Paper tech forms are allowed up to 6 MB, the form says "6 MB at most", and `bodySizeLimit` is set to 8 MB. Vercel Functions reject request bodies over 4.5 MB with a platform 413 before the action runs, so a 5 MB phone photo fails without the app's friendly message. An incident save carrying a 4 MB sketch plus a 1.5 MB signature can fail the same way.
-- **Fix:** Lower `MAX_UPLOAD_BYTES` to about 4 MB and check the size in the browser before posting. Better still, upload straight from the browser with `@vercel/blob/client` (`handleUpload`) and post only the URL. Cap sketch plus signature below 4 MB in total.
-- **Verify:** On a preview deployment, upload a 5 MB JPEG and get a clear in-app message (or a successful client upload), not a 413.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/tech.ts:14`, `src/app/(app)/me/tech/actions.ts:214`, `next.config.ts:12`, `src/app/(app)/admin/incidents/actions.ts:107,161-163`
+- **Problem:** Paper forms are still allowed up to 6 MB, and `bodySizeLimit` is 8 MB. Vercel Functions reject bodies over 4.5 MB before the action runs. An incident save with a 4 MB sketch and a 1.5 MB signature can fail the same way.
+- **Fix:** Lower `MAX_UPLOAD_BYTES` to about 4 MB and check the size in the browser before posting, or upload directly with `@vercel/blob/client`. Cap sketch plus signature below 4 MB.
+- **Verify:** On a preview deployment, a 5 MB JPEG gets the app's own message, not a platform 413.
 
 ### CR-012 — Remove the device's push subscription on sign-out
-- **Status:** New
-- **Where:** `src/server/auth.ts:39-49`, `src/app/api/push/subscribe/route.ts:22-28`
-- **Problem:** `destroySession` deletes the session and cookies, but the `push_subscriptions` row for the browser stays tied to the user who signed out. That user's reminders, instructor notes ("added notes from your session") and tech alerts keep arriving on the shared paddock tablet or borrowed phone until someone else turns push on.
-- **Fix:** In `signOut`, have the client send `DELETE /api/push/subscribe` with its endpoint before calling the action, or have the server delete subscriptions by a device id stored in a cookie. Alternatively, delete the user's subscriptions whose `userAgent` matches the current request.
-- **Verify:** Enable push, sign out, and trigger a reminder for that user. No push should be logged as sent to that endpoint.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/auth.ts:40-50`, `src/app/login/actions.ts:48-51`, `src/app/api/push/subscribe/route.ts:22-28`
+- **Problem:** `destroySession` still leaves the browser's `push_subscriptions` row tied to the person who signed out. Their reminders and notes keep arriving on a shared paddock tablet.
+- **Fix:** Before calling `signOut`, have the client `DELETE /api/push/subscribe` with its endpoint. Alternatively, store a device id cookie with the subscription and delete by it in `destroySession`.
+- **Verify:** Enable push, sign out, and trigger a reminder for that user. No push is logged for that endpoint.
 
 ### CR-013 — Keep the exact wording each driver signed
-- **Status:** New
-- **Where:** `src/app/(app)/admin/waivers/actions.ts:69-75`, `src/app/(app)/me/waivers/actions.ts:43-44`, `src/db/schema.ts:325-355`
-- **Problem:** A signature stores only `bodyHash`, and editing a template overwrites `body` in place, whether or not "sign again" is ticked. Once the wording is edited, nobody can produce the text a driver agreed to; the hash proves only that it was different. For an insurance waiver, that is lost data.
-- **Fix:** Add a `waiver_template_versions` table (template id, version, body, hash, created at). Write a row whenever the body changes, and look the signed text up by `bodyHash`. Alternatively, store the signed body on the signature row.
-- **Verify:** Sign, edit the wording without re-versioning, then open the driver's signature page. The text as signed should be shown.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/waivers/actions.ts:69-75`, `src/app/(app)/me/waivers/actions.ts:39-48`, `src/db/schema.ts:330-360`
+- **Problem:** Editing a template still overwrites `body` in place, and a signature stores only `bodyHash`, so the signed text cannot be produced later. The hash is also taken from the body at submit time, not from the text the driver had on screen. An edit between loading and signing records the wrong fingerprint.
+- **Fix:** Add `waiver_template_versions` (template id, version, body, hash, created at) and write a row whenever the body changes. Post the hash or version shown to the driver, and reject the signature if it no longer matches.
+- **Verify:** Sign, edit the wording without re-versioning, then open the signature. The text as signed is shown.
 
 ## Low
 
 ### CR-014 — Don't lose a reminder when sending fails after the claim
-- **Status:** New
-- **Where:** `src/server/reminders.ts:81-90,145-173`
-- **Problem:** The `reminder_sends` row is inserted before `notifyUsers` runs. If notifying throws (for example, the in-app insert fails), the claim stays and that window is never retried. `recipients` stays 0 and nothing marks the row as failed.
-- **Fix:** Wrap the send in try/catch. On failure, delete the claim so the next run retries, or record a `failed` status.
-- **Verify:** Stub `notifyUsers` to throw once; the next run must send.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/reminders.ts:81-91,125-134,147-176`
+- **Problem:** The `reminder_sends` claim is still inserted before notifying, with no try/catch. A failure leaves the window claimed and never retried. The job now also deletes the previous reminder notifications before sending, so a failure leaves the inbox with nothing.
+- **Fix:** Wrap the deletion and the sends in try/catch. On failure, delete the claim (or record `failed`) so the next minute retries.
+- **Verify:** Stub `notifyUsers` to throw once; the next run sends.
 
 ### CR-015 — Respect students' attendance days on the instructor's screens
-- **Status:** New
-- **Where:** `src/server/queries.ts:98-105`, `src/lib/schedule.ts:46,52-55`
-- **Problem:** `viewerLens` drops `attendsDay1`/`attendsDay2` from students, so an instructor sees "With Owen" and student-session markers on a day Owen isn't attending. The reminder job does filter by day, so the screen and the alerts disagree.
-- **Fix:** Add a `days` field to each lens student and check `item.day` in `relevance` and `studentsIn`.
-- **Verify:** Pair a Saturday-only student; the instructor's Sunday schedule should show no student sessions.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/queries.ts:105-111`, `src/lib/schedule.ts:50,57`
+- **Problem:** `viewerLens` still maps students to `{ groupId, solo, firstName }` only. An instructor sees "With Owen" on a day Owen does not attend, while the reminder job (which filters by day) sends nothing.
+- **Fix:** Add each student's attended days to the lens, and check `item.day` in `relevance` and `studentsIn`.
+- **Verify:** Pair a Saturday-only student. The instructor's Sunday shows no student sessions.
 
 ### CR-016 — Treat pending and waitlisted registrations the same way everywhere
-- **Status:** New
-- **Where:** `src/server/reminders.ts:65`, `src/server/admin.ts:157`, `src/server/auth.ts:186`, `src/server/queries.ts:180`
-- **Problem:** Reminders go only to `confirmed`. The roster, announcements, change alerts and the driver's own "mine" schedule include `pending` and `waitlist`. A waitlisted driver sees their sessions and gets change alerts but no session reminders.
-- **Fix:** Define `ACTIVE_STATUSES` once and use it in all four places, or deliberately exclude waitlisted drivers from schedule relevance.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/reminders.ts:65` vs `src/server/admin.ts:133`, `src/server/auth.ts:245`, `src/server/queries.ts:91,166`
+- **Problem:** Reminders still go only to `confirmed`, while the roster, announcements, change alerts and the driver's own schedule include `pending` and `waitlist`.
+- **Fix:** Define `ACTIVE_STATUSES` once and use it in all of these places, or deliberately exclude waitlisted drivers from schedule relevance too.
 
-### CR-017 — Send schedule-change alerts only to people attending that day
-- **Status:** New
-- **Where:** `src/app/(app)/admin/schedule/actions.ts:289-296`, `src/server/admin.ts:140-176`
-- **Problem:** "Schedule running N minutes later" always goes to `{ kind: "all" }`, and `audienceUserIds` ignores `attendsDay1`/`attendsDay2`. Sunday-only drivers get urgent pushes about Saturday delays.
-- **Fix:** Pass the day into `audienceUserIds` and filter by attendance, as `runReminders` already does.
+### CR-017 — Send delay alerts only to people attending that day
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/schedule/actions.ts:343-350`, `src/server/admin.ts:116-135`
+- **Problem:** "Schedule running N minutes later" still goes to `{ kind: "all" }`, and `audienceUserIds` ignores `attendsDay1`/`attendsDay2`. Sunday-only drivers get urgent alerts about Saturday.
+- **Fix:** Give `audienceUserIds` an optional day and filter by attendance, as `runReminders` does. Pass the day from `shiftSchedule`, `setCancelled` and `saveItem`.
 
 ### CR-018 — Scope the delivery log to the region
-- **Status:** New
+- **Status:** Open (first seen 2026-11-16)
 - **Where:** `src/app/(app)/admin/announcements/page.tsx:71-75`
-- **Problem:** The delivery log selects the latest 150 `message_log` rows across all regions. The README says other regions can be added, and then one region's admins would see another region's addresses and messages.
-- **Fix:** Filter by events in `v.org.id` or by org members. Adding `org_id` to `message_log` is simplest.
+- **Problem:** The log still selects the latest 150 `message_log` rows across all regions.
+- **Fix:** Filter by this org's events or members, or add `org_id` to `message_log`.
 
-### CR-019 — Validate promotion targets on the server
-- **Status:** New
-- **Where:** `src/app/(app)/admin/promotions/actions.ts:179-182`, `src/app/(app)/instructor/actions.ts:150-162`
-- **Problem:** `promoteDirect` accepts any `toGroupId` string, so `memberships.run_group_id` (which has no foreign key) can be set to a group outside the region. `recommendPromotion` allows a "solo" recommendation for groups that have no solo half (Green, White).
-- **Fix:** Require `v.groups.some(g => g.id === toGroupId && !g.isInstructorGroup)`. Allow `kind === "solo"` only when the current group's `instructorPolicy === "optional"`.
+### CR-019 — Validate direct promotion targets on the server
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/promotions/actions.ts:161-184`
+- **Problem:** `recommendPromotion` now checks policies, but `promoteDirect` still accepts any `toGroupId` string, including a group from another region or the instructor group. It also allows a "solo" sign-off for groups without a solo half (Green, White).
+- **Fix:** Require `v.groups.some(g => g.id === toGroupId && !g.isInstructorGroup)`. Allow `kind === "solo"` only when the member's group has `instructorPolicy === "optional"`.
 
 ### CR-020 — Validate schedule item `kind` and `audience`
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/app/(app)/admin/schedule/actions.ts:123-124`
+- **Problem:** Any string is still stored. An unknown `audience` makes `relevance` and `audienceOf` return null, so nobody sees it as theirs and no alert is sent.
+- **Fix:** Check against `track|classroom|meeting|break|other` and `groups|all|instructors|none`, and fail otherwise.
+
+### CR-026 — Check both people's registrations before pairing
 - **Status:** New
-- **Where:** `src/app/(app)/admin/schedule/actions.ts:95-96`
-- **Problem:** Any string is stored. An unknown `audience` makes `relevance` return null for everyone and suppresses change alerts. An unknown `kind` loses its icon and sort order.
-- **Fix:** Check both against the allowed lists (`track|classroom|meeting|break|other`, `groups|all|instructors|none`) and fail otherwise.
+- **Where:** `src/app/(app)/admin/instructors/actions.ts:105-127`
+- **Problem:** `assignInstructor` accepts an instructor whose registration is cancelled (it checks only `reg?.isInstructor`), and never checks the student's registration. The pairing is written and both people are told "Your instructor is X". `livePairings` then hides it, so the student appears unpaired despite the alert.
+- **Evidence:**
+  ```ts
+  if (!reg?.isInstructor) return fail("That person is not instructing at this event.");
+  ```
+- **Fix:** Require `reg.status !== "cancelled"` for the instructor. Require an active, non-instructor registration for the student.
+- **Verify:** Call `assignInstructor` with a cancelled instructor's id; it fails and sends no alerts.
+
+### CR-027 — Keep demo data from reaching real email and SMS providers
+- **Status:** New
+- **Where:** `src/server/notify.ts:19-25,207-216`, `src/db/seed.ts:421,430`
+- **Problem:** Sending depends only on provider keys, never on `DEMO_MODE`. Every third seeded person has `notifySms: true` with a 555-01xx number, and every seeded address is `@example.com`. If keys are added before demo data is removed (the README lists the steps "connect email, remove DEMO_MODE" in that order), reminders and announcements go out to fictional addresses and numbers. That costs money and damages the sender's reputation.
+- **Fix:** In `sendEmail` and `sendSms`, treat `demoMode()` as "simulated" unless an explicit override is set. Or skip reserved destinations (`example.com`, `555-01xx`).
+- **Verify:** With `DEMO_MODE=1` and fake provider keys, an announcement logs "simulated" and makes no fetch.
+
+### CR-028 — Carry "moved from" and out-of-range items along when event dates change
+- **Status:** New
+- **Where:** `src/app/(app)/admin/events/actions.ts:61-72`, `src/lib/schedule.ts:114-118`
+- **Problem:** Moving an event's dates shifts `day` but not `movedFromDay`. A session that was moved earlier now differs from its old date, so it reads "moved from Saturday 10:10" while sitting at Saturday 10:10. Shortening an event (two days to one) leaves the second day's items stored but outside `eventDays`, where they cannot be edited from the day tabs.
+- **Fix:** Shift `movedFromDay` by the same number of days. Refuse a shorter range while items exist on the dropped days, or offer to delete them.
+- **Verify:** Delay a session, then move the event a week. The session shows no "moved from" if its time matches the original.
+
+### CR-029 — Only un-send a report that was sent
+- **Status:** New
+- **Where:** `src/app/(app)/admin/incidents/actions.ts:257-270`
+- **Problem:** `unmarkIncidentSent` sets `status: "final"` whatever the current status. Called on a draft, it promotes an incomplete report to final, bypassing `finalProblems`, and the report can then no longer be deleted.
+- **Fix:** Return early unless `row.status === "sent"`.
+- **Verify:** Call it on a draft; the status stays `draft`.
 
 ## Suggestions
 
 ### CR-021 — Prune tables that grow every minute
-- **Status:** New
-- **Where:** `src/server/reminders.ts`, `src/server/notify.ts`, `src/db/schema.ts`
-- **Problem:** `message_log` (one row per simulated SMS or push per reminder), `notifications`, `reminder_sends`, `otp_codes` and expired `sessions` are never pruned. On Neon's free plan the storage and the delivery-log scans will grow every event weekend.
-- **Fix:** Add a daily cleanup, either in the cron route on the first quiet check of the day or as a separate cron entry. Add a `message_log(kind, created_at)` index if the log is filtered by kind.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/notify.ts`, `src/server/reminders.ts`, `src/db/schema.ts`
+- **Problem:** `otp_codes` and `rate_limits` are now pruned. `message_log`, `notifications`, `reminder_sends` and expired `sessions` still are not.
+- **Fix:** Add a daily cleanup (on the cron's first quiet check, or as its own cron entry), and a `message_log(kind, created_at)` index if the log is filtered by kind.
 
 ### CR-022 — Remove duplicated helpers and small drift
-- **Status:** New
-- **Where:** `src/server/tech.ts:135-142` vs `src/server/admin.ts:198-207`; `src/instrumentation.ts:18`; `package.json` `lint` script
-- **Problem:** `adminUserIds` is defined twice. The dev reminder timer runs every 30 s while the README says once a minute. The `lint` script covers `src` only, while the runner lints `src scripts`.
-- **Fix:** Keep one `adminUserIds` in `server/admin.ts`, align the interval or the README, and set `"lint": "eslint src scripts"`.
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `src/server/tech.ts:135-142` vs `src/server/admin.ts:169-178`; `src/instrumentation.ts:18`; `package.json:9`; `.env.example`
+- **Problem:**
+  - `adminUserIds` is still defined twice.
+  - The dev timer runs every 30 s while the README says once a minute.
+  - The `lint` script covers only `src`, while the runner lints `src scripts`.
+  - `PGLITE_DIR` (read in `src/db/index.ts:56` and `scripts/db-reset.ts:9`) is not in `.env.example` or the README.
+- **Fix:** Keep one `adminUserIds` in `server/admin.ts`. Align the interval or the README. Set `"lint": "eslint src scripts"`. Document `PGLITE_DIR`.
 
-### CR-023 — Cover the risky paths in UAT, and stop the seed from hiding them
-- **Status:** New
-- **Where:** `uat/tests/sandbox/*`, `src/db/seed.ts:612`
-- **Problem:** The suite has 171 tests but none for: moving a session to another day after its reminders fired (CR-004), changing a session's groups with notify on (CR-005), re-importing after an in-app group change or a cancellation (CR-006, CR-007), or an instructor leaving the event (CR-003). The CR-001 check exists but uses `expect.soft`. Every seeded signature is at version 1, which hides CR-001.
-- **Fix:** Add those scenarios. Make the waiver-version assertions hard. Seed at least one driver whose required waiver was signed at an older version.
+### CR-023 — Cover the remaining risky paths in UAT
+- **Status:** Open (first seen 2026-11-16)
+- **Where:** `uat/tests/sandbox/*`
+- **Problem:** Coverage improved: there are tests for lost-audience alerts, re-import keeping app groups, and waiver re-versioning. Still missing:
+  - A session-overlap pairing clash (CR-024); the existing auto-pair test asserts only same-group clashes.
+  - A cancelled row on re-import (CR-007).
+  - A roster-ticked instructor opening My students (CR-025).
+  - A reminder after moving a session to another day.
+
+  `expect.soft` still appears 13 times across four specs.
+- **Fix:** Add those scenarios, and turn the soft assertions on clearance and pairing into hard ones.
 
 ## Resolved since last run
-First run; nothing to compare against.
+- **CR-001 — Count only current-version waiver signatures everywhere clearance is shown** — resolved: `src/lib/clearance.ts` (`isCurrent`, `currentSignedCount`) and `src/server/clearance.ts` (`clearanceFor`, `waiverCounts`) now feed the checklist, roster view, export and driver file.
+- **CR-002 — Stop showing "cleared to drive / go on track" on the strength of a sticker alone** — resolved: `/me/tech` and the grid page show "not cleared" while waivers are outstanding, and the sticker alert says so.
+- **CR-003 — End or flag pairings when the instructor (or student) leaves the event** — resolved: `endPairings` runs on cancellation and when someone stops instructing, `livePairings` filters leftover rows, and `getPeople` excludes cancelled registrations.
+- **CR-004 — Include the day in the reminder de-duplication key** — resolved: `reminder_sends.day` was added and `reminder_once` covers it (migration `0002_review_fixes.sql`).
+- **CR-005 — Tell the people a session used to be for when its run groups change** — resolved: `saveItem` alerts the lost audience with its own wording.
+- **CR-006 — Keep a re-import from overwriting run groups set in the app** — resolved: `importGroup` keeps the app's group, previews the differences and offers `fileGroups` to override.
 
 ## Coverage notes
-- `checks/typecheck.txt` and `checks/lint.txt` both contain only `exit code 0`: no type errors and no lint findings. `checks/tests.txt` says there is no unit-test suite; the UAT harness under `uat/` is run elsewhere.
-- **Read in full:** all of `src/server/**`, `src/lib/{instruction,time,schedule}.ts`, `src/db/{schema,index}.ts`, `src/proxy.ts`, `src/instrumentation.ts`, every Server Action file under `src/app/**/actions.ts`, all route handlers under `src/app/api/**` and `admin/roster/export`, both migrations and the journal, `next.config.ts`, `vercel.json`, `package.json`, `.env.example`, `public/sw.js`, and `scripts/db-*.ts`.
-- **Partly read:** the larger page and UI components (home, now-panel, schedule-view, admin overview, roster table and driver file, instructors, grid tech, `/me/tech`, the instructor student page, announcements, `tech/[token]`) were read in the sections that compute status, relevance or authorization. Purely presentational components (`ui.tsx`, `sketch-pad`, `track-map`, the incident form and print layouts, track guide pages, `globals.css`) were only skimmed. `src/db/seed.ts` and the UAT specs were searched, not read line by line.
-- `drizzle/meta/*_snapshot.json` was not diffed field by field against `schema.ts`. Spot checks of tables, unique indexes and the 0001 columns found no drift.
-- `scripts/review*`, `scripts/agent-ledger.ts` and `scripts/review/*` are review-harness tooling and were not reviewed. I did not open any other agent's report.
-- The review guard refused one batched `cat` of the config files (it matched on package or deploy file names). I read those files with the file reader instead, so coverage was not affected.
-- `.gitignore`, `.vercelignore`, `tsconfig.json`, `eslint.config.mjs` and `drizzle.config.ts` were listed but not opened in this run.
-- Nothing was executed. Findings about concurrency (CR-008, CR-009, CR-010) and Vercel's 4.5 MB body limit (CR-011) are reasoned from the code and the platform's documented limits; they were not reproduced.
+- `checks/typecheck.txt` and `checks/lint.txt` each contain only `exit code 0`: 0 type errors and 0 lint findings. `checks/tests.txt` says there is no unit-test suite; the UAT harness under `uat/` is run elsewhere.
+- **Read in full:**
+  - All of `src/server/**`, `src/lib/{clearance,instruction,schedule,time}.ts`, `src/db/{schema,index}.ts`, `src/proxy.ts`, `src/instrumentation.ts`.
+  - Every Server Action file under `src/app/**/actions.ts`, and all route handlers under `src/app/api/**` plus `admin/roster/export`.
+  - `drizzle/0001`, `drizzle/0002` and the journal, `scripts/db-*.ts`, `public/sw.js`, `src/components/{clock,push-toggle}.tsx`, `src/components/shell/{live-sync,skeleton}.tsx`.
+  - `package.json`, `vercel.json`, `.env.example`, `next.config.ts`, `.gitignore`, `.vercelignore`.
+- **Partly read:**
+  - The larger pages (home, instructor and student pages, admin overview, driver file, instructors page, grid and `/me/tech`, announcements, schedule, the `tech/[token]` page) were read in the sections that compute status, relevance or authorization.
+  - `src/db/seed.ts` was read for schedules, contact data and dates. `roster-import.ts` was read for row parsing. The UAT specs were searched, not read line by line.
+  - Presentational components (`ui.tsx`, `sketch-pad`, `track-map`, incident form and print layouts, track guide pages, `globals.css`) and `src/content/*` were not reviewed.
+- `drizzle/0000` was spot-checked for the reminder, waiver and sticker indexes. The `0002` snapshot was checked for `reminder_once`. The snapshots were not diffed field by field against `schema.ts`.
+- `scripts/review*`, `scripts/agent-ledger.ts`, `scripts/review/*` and `scripts/uat.sh` are review and UAT tooling and were not reviewed. I did not open or look for any other reviewer's report.
+- The review guard refused one batched `cat` of the config files, apparently because of the package and deploy file names. I read them with the file reader instead. `eslint.config.mjs`, `drizzle.config.ts` and `tsconfig.json` were not opened this run.
+- Nothing was executed. The concurrency findings (CR-008, CR-009, CR-010), the 4.5 MB body limit (CR-011) and the clash in CR-024 were reasoned from the code and the seeded schedule, not reproduced.
